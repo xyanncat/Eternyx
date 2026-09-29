@@ -90,6 +90,30 @@ First thing in Discord: `/config set log-channel #mod-log` and
   hard caps on destructive commands, snowflake validation on all IDs, no eval,
   no dynamic code paths, exact-pinned dependencies.
 
+## Low-RAM tuning (6GB phone)
+
+Storage is a non-issue on the 64GB model (DB is a few MB, backups ~MB-scale);
+RAM is the constraint, and the bot is tuned for it at three layers:
+
+1. **Node heap cap** — the service runs `node --max-old-space-size=256`, so a
+   runaway heap kills only the bot process (runit restarts it in seconds),
+   never the phone.
+2. **Slim caches** (src/index.js): message/presence/thread/voice caches are
+   disabled entirely (nothing reads message text), the member cache is capped
+   at 500 with the bot's own member pinned, and sweepers evict stale
+   members/users hourly. Expected steady-state: **~100–200 MB RSS** — check
+   `/botstatus` (a `mem_pressure` event is recorded above 300 MB).
+3. **MIUI RAM-side checklist** (in addition to the battery checklist in §3):
+   - Recents → pin Termux (stops "clear all" from killing it).
+   - Security app → Settings → disable *Clear memory when screen locks* (or
+     add Termux to its exceptions).
+   - Developer options → Background process limit → *Standard limit*.
+   - *Memory extension* (virtual RAM) can stay **ON** — with 40GB free, swap
+     on storage actually helps keep Termux resident on a 6GB device.
+
+If you ever need more headroom: the guild is small, so lowering
+`GuildMemberManager.maxSize` (e.g. 200) in `src/index.js` is safe.
+
 ## Tests
 
 ```sh

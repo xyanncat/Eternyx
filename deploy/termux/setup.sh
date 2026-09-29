@@ -18,7 +18,9 @@ mkdir -p "$PREFIX/var/service/bot"
 cat > "$PREFIX/var/service/bot/run" <<EOF
 #!/data/data/com.termux/files/usr/bin/sh
 cd "$REPO_DIR"
-exec termux-wake-lock node src/index.js 2>> logs/err.log
+# Heap cap protects the 6GB phone: if the heap ever blows past 256MB the
+# process dies and runit restarts it, instead of MIUI killing all of Termux.
+exec termux-wake-lock node --max-old-space-size=256 src/index.js 2>> logs/err.log
 EOF
 chmod +x "$PREFIX/var/service/bot/run"
 
