@@ -25,7 +25,8 @@ export async function execute(interaction) {
 
   if (meta.ownerOnly || meta.modOnly) {
     const cfg = getConfig(interaction.guildId);
-    if (meta.ownerOnly && !isOwner(interaction.user.id, cfg)) {
+    const guildOwnerId = interaction.guild?.ownerId ?? null;
+    if (meta.ownerOnly && !isOwner(interaction.user.id, cfg, guildOwnerId)) {
       return interaction.reply({
         embeds: [errorEmbed('This command is restricted to bot owners.', interaction.user)],
         flags: EPHEMERAL,

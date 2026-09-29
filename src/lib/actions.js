@@ -64,7 +64,7 @@ export async function runModAction(
     targetUser,
     targetMember,
     botMember: guild.members.me,
-    moderatorIsOwner: isOwner(interaction.user.id, cfg),
+    moderatorIsOwner: isOwner(interaction.user.id, cfg, guild.ownerId),
     targetIsMod: targetMember ? isMod(targetMember, cfg) : false,
     allowOwnerTarget,
   });

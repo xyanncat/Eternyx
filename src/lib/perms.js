@@ -3,8 +3,15 @@
 import { PermissionFlagsBits } from 'discord.js';
 import { env } from '../config.js';
 
-export function isOwner(userId, guildConfig) {
-  return env.OWNER_IDS.includes(userId) || guildConfig.ownerIds.includes(userId);
+// The Discord server owner is always an implicit bot owner (bootstrap path):
+// they already hold ultimate authority over the guild, so /config must work
+// for them before any roles or .env entries are configured.
+export function isOwner(userId, guildConfig, guildOwnerId = null) {
+  return (
+    env.OWNER_IDS.includes(userId) ||
+    guildConfig.ownerIds.includes(userId) ||
+    (guildOwnerId !== null && userId === guildOwnerId)
+  );
 }
 
 export function isMod(member, guildConfig) {

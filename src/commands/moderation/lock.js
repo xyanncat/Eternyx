@@ -7,8 +7,8 @@ export const meta = { modOnly: true };
 export const data = new SlashCommandBuilder()
   .setName('lock')
   .setDescription('Lock a channel (deny SendMessages for @everyone)')
-  .addChannelOption((o) => o.setName('channel').setDescription('Channel (default: here)'))
   .addStringOption((o) => o.setName('reason').setDescription('Reason').setRequired(true).setMaxLength(512))
+  .addChannelOption((o) => o.setName('channel').setDescription('Channel (default: here)'))
   .setDefaultMemberPermissions(PermissionFlagsBits.ManageChannels)
   .setContexts(InteractionContextType.Guild);
 
