@@ -2,7 +2,7 @@
 // processes (dashboard, panel) can report on the bot without IPC.
 import { writeFileSync } from 'node:fs';
 import path from 'node:path';
-import { ROOT } from './config.js';
+import { ROOT } from '../config.js';
 
 const STATUS_FILE = path.join(ROOT, 'data', 'bot-status.json');
 
