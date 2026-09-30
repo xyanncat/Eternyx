@@ -30,7 +30,10 @@ render() {
   BAT_JSON=$(timeout 3 termux-battery-status 2>/dev/null || true)
   BAT=$(printf '%s' "$BAT_JSON" | grep -o '"percentage": *[0-9]*' | grep -o '[0-9]*')
   BATS=$(printf '%s' "$BAT_JSON" | grep -o '"status": *"[A-Z]*"' | cut -d'"' -f4)
-  printf " battery: ${Y}${BAT:-n/a}%%${N} ${D}(${BATS:-install Termux:API app})${N}\n"
+  TEMP=$(printf '%s' "$BAT_JSON" | grep -o '"temperature": *[0-9.]*' | grep -o '[0-9.]*')
+  TEMP_NOTE=""
+  [ -n "$TEMP" ] && TEMP_NOTE=" · ${TEMP}°C"
+  printf " battery: ${Y}${BAT:-n/a}%%${N} ${D}(${BATS:-?}${TEMP_NOTE})${N}\n"
 
   # --- command usage ---
   printf "\n ${G}COMMAND USAGE${N} ${D}(all time)${N}\n"
