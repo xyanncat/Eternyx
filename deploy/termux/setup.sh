@@ -34,7 +34,14 @@ cat > "$HOME/.termux/boot/start-services.sh" <<'EOF'
 # SVDIR is not exported in every boot context — set it explicitly.
 export SVDIR="/data/data/com.termux/files/usr/var/service"
 termux-wake-lock
+# runsvdir may not be running yet in the boot context — ensure it is,
+# otherwise `sv up` fails with "unable to change to service directory".
+pgrep -x runsvdir >/dev/null 2>&1 || setsid runsvdir "$SVDIR" >/dev/null 2>&1 &
+sleep 2
 sv up bot
+# sshd: the runit sshd service (sshd -D -e) fails on this phone — start the
+# daemon directly instead, which is the mode proven to work.
+pgrep -x sshd >/dev/null 2>&1 || sshd
 EOF
 chmod +x "$HOME/.termux/boot/start-services.sh"
 
