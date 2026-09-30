@@ -32,4 +32,7 @@ export const env = {
     .split(',')
     .map((s) => s.trim())
     .filter((s) => /^\d{17,20}$/.test(s)),
+  // Optional: remote dashboard (Vercel). Reporting is disabled unless both are set.
+  DASHBOARD_URL: process.env.DASHBOARD_URL ?? null,
+  DASHBOARD_INGEST_KEY: process.env.DASHBOARD_INGEST_KEY ?? null,
 };

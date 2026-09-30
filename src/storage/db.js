@@ -174,6 +174,18 @@ export function topCommands(limit = 10) {
     .all(limit);
 }
 
+export function recentCases(limit = 20) {
+  return db
+    .prepare('SELECT id, user_id, moderator_id, type, reason, status, created_at FROM cases ORDER BY id DESC LIMIT ?')
+    .all(limit);
+}
+
+export function recentEvents(limit = 20) {
+  return db
+    .prepare('SELECT kind, detail, created_at FROM events ORDER BY id DESC LIMIT ?')
+    .all(limit);
+}
+
 /* ---------- backup ---------- */
 
 export function backupTo(filePath) {

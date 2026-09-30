@@ -9,6 +9,8 @@ import path from 'node:path';
 import { ROOT, env } from './config.js';
 import { initDb, closeDb, recordEvent } from './storage/db.js';
 import { recordUsage, startUsageFlush } from './lib/stats.js';
+import { startBotHeartbeat } from './lib/heartbeat.js';
+import { startDashboardReporting } from './lib/report.js';
 import { logger } from './lib/log.js';
 import { markCleanShutdown } from './lib/runtime.js';
 
@@ -83,6 +85,9 @@ await loadModules(path.join(ROOT, 'src', 'events'), (mod, file) => {
   }
   client.on(mod.name, (...args) => Promise.resolve(mod.execute(...args)).catch((err) => logger.error(`${mod.name} handler: ${err?.stack ?? err}`)));
 });
+
+client.once('ready', () => startBotHeartbeat(client));
+client.once('ready', () => startDashboardReporting(client));
 
 // Memory trace for the low-RAM host: one line every 10 min, DB event if high.
 setInterval(() => {
