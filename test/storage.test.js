@@ -1,6 +1,6 @@
 import { test, beforeEach } from 'node:test';
 import assert from 'node:assert/strict';
-import { initDb, closeDb, createCase, getCase, setCaseStatus, listUserCases, countActiveWarnings, getConfig, setConfig, recordEvent } from '../src/storage/db.js';
+import { initDb, closeDb, createCase, getCase, setCaseStatus, listUserCases, countActiveWarnings, getConfig, setConfig, recordEvent, addCommandCount, topCommands } from '../src/storage/db.js';
 
 beforeEach(() => {
   closeDb();
@@ -56,4 +56,15 @@ test('recordEvent stores security events', () => {
   recordEvent('raid_suspected', { nested: true });
   // No throw + rows queryable through listUserCases-style SQL is enough here;
   // events have no read API by design (accessed only via sqlite3 CLI, plan §4.9).
+});
+
+test('command usage stats aggregate counts', () => {
+  addCommandCount('ban', 3, 1000);
+  addCommandCount('ban', 2, 2000);
+  addCommandCount('ping', 1, 3000);
+  const top = topCommands(10);
+  assert.equal(top[0].name, 'ban');
+  assert.equal(top[0].count, 5);
+  assert.equal(top[0].last_used, 2000);
+  assert.equal(top.find((r) => r.name === 'ping').count, 1);
 });

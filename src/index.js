@@ -8,10 +8,12 @@ import { pathToFileURL } from 'node:url';
 import path from 'node:path';
 import { ROOT, env } from './config.js';
 import { initDb, closeDb, recordEvent } from './storage/db.js';
+import { recordUsage, startUsageFlush } from './lib/stats.js';
 import { logger } from './lib/log.js';
 import { markCleanShutdown } from './lib/runtime.js';
 
 initDb(path.join(ROOT, 'data', 'eternyx.db'));
+startUsageFlush();
 
 const client = new Client({
   intents: [GatewayIntentBits.Guilds, GatewayIntentBits.GuildMembers, GatewayIntentBits.GuildModeration],
@@ -64,7 +66,14 @@ await loadModules(path.join(ROOT, 'src', 'commands'), (mod, file) => {
     logger.warn(`skipping duplicate command name ${mod.data.name} in ${file}`);
     return;
   }
-  client.commands.set(mod.data.name, { data: mod.data, execute: mod.execute, meta: mod.meta ?? {} });
+  // Usage telemetry: wrap execute so every real run is counted at one choke
+  // point; the counted name comes from the local command module, not from
+  // interaction data.
+  const wrappedExecute = async (interaction) => {
+    recordUsage(mod.data.name);
+    return mod.execute(interaction);
+  };
+  client.commands.set(mod.data.name, { data: mod.data, execute: wrappedExecute, meta: mod.meta ?? {} });
 });
 
 await loadModules(path.join(ROOT, 'src', 'events'), (mod, file) => {

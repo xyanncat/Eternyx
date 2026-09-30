@@ -33,6 +33,11 @@ const SCHEMA = [
     detail TEXT NOT NULL,
     created_at INTEGER NOT NULL
   )`,
+  `CREATE TABLE IF NOT EXISTS command_stats (
+    name TEXT PRIMARY KEY,
+    count INTEGER NOT NULL DEFAULT 0,
+    last_used INTEGER NOT NULL DEFAULT 0
+  )`,
 ];
 
 export function initDb(dbPath) {
@@ -152,6 +157,21 @@ export function recordEvent(kind, detail) {
     String(detail).slice(0, 4000),
     Date.now()
   );
+}
+
+/* ---------- command usage stats (drives the phone panel) ---------- */
+
+export function addCommandCount(name, count, lastUsed) {
+  db.prepare(
+    `INSERT INTO command_stats (name, count, last_used) VALUES (?, ?, ?)
+     ON CONFLICT(name) DO UPDATE SET count = count + ?, last_used = ?`
+  ).run(name, count, lastUsed, count, lastUsed);
+}
+
+export function topCommands(limit = 10) {
+  return db
+    .prepare('SELECT name, count, last_used FROM command_stats ORDER BY count DESC LIMIT ?')
+    .all(limit);
 }
 
 /* ---------- backup ---------- */
