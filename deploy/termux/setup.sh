@@ -6,7 +6,7 @@ set -e
 REPO_DIR="$(cd "$(dirname "$0")/../.." && pwd)"
 echo "[1/6] Installing packages…"
 pkg update -y
-pkg install -y nodejs-lts git termux-services termux-api sqlite
+pkg install -y nodejs-lts git termux-services termux-api sqlite cronie
 
 echo "[2/6] Installing dependencies (exact versions from the lockfile)…"
 cd "$REPO_DIR"
@@ -20,7 +20,10 @@ cat > "$PREFIX/var/service/bot/run" <<EOF
 cd "$REPO_DIR"
 # Heap cap protects the 6GB phone: if the heap ever blows past 256MB the
 # process dies and runit restarts it, instead of MIUI killing all of Termux.
-exec termux-wake-lock node --max-old-space-size=256 src/index.js 2>> logs/err.log
+# wake-lock is a separate statement: it must NOT be exec'd (it would replace
+# this script and node would never start).
+termux-wake-lock >/dev/null 2>&1 || true
+exec node --max-old-space-size=256 src/index.js 2>> logs/err.log
 EOF
 chmod +x "$PREFIX/var/service/bot/run"
 
@@ -28,6 +31,8 @@ echo "[4/6] Creating the boot hook (starts the bot after phone reboot)…"
 mkdir -p "$HOME/.termux/boot"
 cat > "$HOME/.termux/boot/start-services.sh" <<'EOF'
 #!/data/data/com.termux/files/usr/bin/sh
+# SVDIR is not exported in every boot context — set it explicitly.
+export SVDIR="/data/data/com.termux/files/usr/var/service"
 termux-wake-lock
 sv up bot
 EOF
