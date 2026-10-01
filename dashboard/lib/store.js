@@ -1,16 +1,21 @@
 // Data layer: one encrypted snapshot in Vercel Blob, pushed by the phone
-// every 60s. Falls back to demo seed data when nothing has been pushed yet
-// (local dev / preview / before the first push) so the UI always works.
+// every 60s, PLUS a bidirectional setup-command queue written by the site
+// and pulled by the phone. Falls back to demo seed data when nothing has
+// been pushed yet so the UI always works.
 //
-// The snapshot contains moderation metadata (case reasons, user IDs), so it
-// is encrypted at rest with AES-256-GCM using a key derived from
-// DASHBOARD_INGEST_KEY — the public blob URL holds ciphertext only.
+// The snapshot and queue both contain moderation metadata, so they are
+// encrypted at rest with AES-256-GCM using a key derived from
+// DASHBOARD_INGEST_KEY — the public blob URLs hold ciphertext only.
 // All blob IO goes through the @vercel/blob SDK (no raw fetch in this codebase).
 import { put, get } from '@vercel/blob';
-import { createHash, createDecipheriv, createCipheriv, randomBytes } from 'node:crypto';
+import { createHash, createDecipheriv, createCipheriv, randomBytes, randomUUID } from 'node:crypto';
 import { seedSnapshot } from './seed';
 
-const BLOB_PATH = 'snapshot.bin';
+const SNAPSHOT_PATH = 'snapshot.bin';
+const QUEUE_PATH = 'commands.bin';
+const RESULTS_PATH = 'command-results.bin';
+const MAX_QUEUE = 25;
+const MAX_RESULTS = 50;
 
 function deriveKey() {
   const secret = process.env.DASHBOARD_INGEST_KEY;
@@ -32,25 +37,85 @@ function decrypt(b64) {
   return Buffer.concat([decipher.update(buf.subarray(28)), decipher.final()]).toString('utf8');
 }
 
-export async function readSnapshot() {
-  if (!deriveKey()) return seedSnapshot();
+async function readEncryptedJson(path, fallback) {
+  if (!deriveKey()) return fallback;
   try {
-    const res = await get(BLOB_PATH, { access: 'public' });
-    if (res.statusCode !== 200 || !res.stream) throw new Error('snapshot not found');
+    const res = await get(path, { access: 'public' });
+    if (res.statusCode !== 200 || !res.stream) return fallback;
     const text = await new Response(res.stream).text();
     return JSON.parse(decrypt(text));
   } catch {
-    /* nothing pushed yet, wrong key, or blob unreachable — demo mode */
-    return seedSnapshot();
+    return fallback;
   }
 }
 
+export async function readSnapshot() {
+  return readEncryptedJson(SNAPSHOT_PATH, seedSnapshot());
+}
+
 export async function writeSnapshot(data) {
-  const key = deriveKey();
-  if (!key) throw new Error('DASHBOARD_INGEST_KEY not configured');
-  await put(BLOB_PATH, encrypt(JSON.stringify(data)), {
+  if (!deriveKey()) throw new Error('DASHBOARD_INGEST_KEY not configured');
+  await put(SNAPSHOT_PATH, encrypt(JSON.stringify(data)), {
     access: 'public', // holds ciphertext only — public URL is meaningless without the key
     allowOverwrite: true,
     contentType: 'text/plain',
   });
+}
+
+/* ── setup-command queue (site writes, phone pulls+acks) ── */
+
+export async function readQueue() {
+  return readEncryptedJson(QUEUE_PATH, []);
+}
+
+export async function enqueueCommand({ action, params, createdBy }) {
+  if (!deriveKey()) throw new Error('DASHBOARD_INGEST_KEY not configured');
+  const queue = await readQueue();
+  const command = {
+    id: randomUUID(),
+    action,
+    params: params ?? {},
+    createdBy: createdBy ?? 'dashboard',
+    createdAt: Date.now(),
+  };
+  queue.push(command);
+  if (queue.length > MAX_QUEUE) queue.splice(0, queue.length - MAX_QUEUE);
+  await put(QUEUE_PATH, encrypt(JSON.stringify(queue)), {
+    access: 'public',
+    allowOverwrite: true,
+    contentType: 'text/plain',
+  });
+  return command;
+}
+
+export async function acknowledgeCommands(acks = []) {
+  if (acks.length === 0) return { queue: await readQueue(), results: null };
+  if (!deriveKey()) throw new Error('DASHBOARD_INGEST_KEY not configured');
+  const ackIds = new Set(acks.map((a) => a.id));
+  const queue = (await readQueue()).filter((c) => !ackIds.has(c.id));
+  await put(QUEUE_PATH, encrypt(JSON.stringify(queue)), {
+    access: 'public',
+    allowOverwrite: true,
+    contentType: 'text/plain',
+  });
+  const byId = new Map(acks.map((a) => [a.id, a]));
+  const existing = await readEncryptedJson(RESULTS_PATH, []);
+  const results = [
+    ...existing,
+    ...acks.map((a) => ({
+      ...a,
+      createdBy: byId.get(a.id)?.createdBy ?? 'dashboard',
+      at: Date.now(),
+    })),
+  ].slice(-MAX_RESULTS);
+  await put(RESULTS_PATH, encrypt(JSON.stringify(results)), {
+    access: 'public',
+    allowOverwrite: true,
+    contentType: 'text/plain',
+  });
+  return { queue, results };
+}
+
+export async function readResults() {
+  return readEncryptedJson(RESULTS_PATH, []);
 }

@@ -1,48 +1,103 @@
-// Remote dashboard reporting (Vercel). Pushes a full snapshot every 60s —
-// outbound only, the phone never exposes an inbound port (plan §3).
+// Remote dashboard reporting + command execution (Vercel). Every 60s:
+// 1. pull the encrypted pending-command queue from the dashboard
+// 2. execute each command (allowlisted, validated) and collect acks
+// 3. push the full snapshot (incl. guild channels/roles + config) with acks
+// Outbound only, the phone never exposes an inbound port (plan §3).
 // Disabled silently unless DASHBOARD_URL + DASHBOARD_INGEST_KEY are set.
 import { readFile } from 'node:fs/promises';
 import path from 'node:path';
 import { ROOT, env } from '../config.js';
-import { topCommands, recentCases, recentEvents } from '../storage/db.js';
+import { topCommands, recentCases, recentEvents, getConfig } from '../storage/db.js';
+import { executeCommand } from './commands.js';
 import { logger } from './log.js';
 
 const INTERVAL_MS = 60_000;
+const MAX_COMMANDS_PER_CYCLE = 10;
 
 export function startDashboardReporting(client) {
   if (!env.DASHBOARD_URL || !env.DASHBOARD_INGEST_KEY) {
     logger.info('dashboard reporting disabled (DASHBOARD_URL / DASHBOARD_INGEST_KEY not set)');
     return;
   }
-  const push = async () => {
+  const cycle = async () => {
     try {
-      await pushSnapshot(client);
+      const queue = await pullQueue();
+      const acks = [];
+      for (const cmd of queue.slice(0, MAX_COMMANDS_PER_CYCLE)) {
+        const result = await executeCommand(client, cmd);
+        acks.push({ id: cmd.id, action: cmd.action, ok: result.ok, detail: result.detail });
+        logger.info(`dashboard cmd ${cmd.action}: ${result.ok ? 'ok' : 'failed'} — ${result.detail}`);
+      }
+      await pushSnapshot(client, acks);
       logger.info('dashboard snapshot pushed');
     } catch (err) {
-      logger.warn(`dashboard push failed: ${err.message}`);
+      logger.warn(`dashboard cycle failed: ${err.message}`);
     }
   };
-  push();
-  setInterval(push, INTERVAL_MS).unref();
+  cycle();
+  setInterval(cycle, INTERVAL_MS).unref();
 }
 
-async function pushSnapshot(client) {
+function api(path) {
+  return env.DASHBOARD_URL.replace(/\/+$/, '') + path;
+}
+
+async function pullQueue() {
+  const res = await fetch(api('/api/commands'), {
+    headers: { authorization: `Bearer ${env.DASHBOARD_INGEST_KEY}` },
+  });
+  if (!res.ok) throw new Error(`queue fetch HTTP ${res.status}`);
+  const data = await res.json();
+  return Array.isArray(data.commands) ? data.commands : [];
+}
+
+async function pushSnapshot(client, acks = []) {
+  const guild = client.guilds.cache.first();
   const logText = await readFile(path.join(ROOT, 'logs', 'bot.log'), 'utf8').catch(() => '');
+  const cfg = guild ? getConfig(guild.id) : {};
   const body = {
     bot: {
       username: client.user?.username ?? null,
-      guild: client.guilds.cache.first()?.name ?? null,
+      guild: guild?.name ?? null,
       uptimeMs: client.uptime ?? 0,
       rssMb: Math.round(process.memoryUsage().rss / 1_048_576),
       wsPingMs: Math.max(0, client.ws?.ping ?? 0),
       startedAt: Date.now() - (client.uptime ?? 0),
     },
+    guild: guild
+      ? {
+          channels: [...guild.channels.cache.values()]
+            .filter((c) => c.isTextBased() && !c.isThread())
+            .slice(0, 60)
+            .map((c) => ({ id: c.id, name: c.name })),
+          roles: [...guild.roles.cache.values()]
+            .filter((r) => r.id !== guild.id && !r.managed)
+            .slice(0, 60)
+            .map((r) => ({ id: r.id, name: r.name })),
+          automodRules: (() => {
+            try {
+              return [...guild.autoModerationRules.cache.values()].slice(0, 30).map((r) => ({ id: r.id, name: r.name, enabled: r.enabled }));
+            } catch {
+              return [];
+            }
+          })(),
+        }
+      : null,
+    config: guild
+      ? {
+          logChannelId: cfg.logChannelId ?? null,
+          modRoleIds: cfg.modRoleIds ?? [],
+          raidThreshold: cfg.raidThreshold ?? 10,
+          nukeAutoAction: cfg.nukeAutoAction ?? 0,
+        }
+      : null,
     usage: topCommands(20),
     cases: recentCases(20),
     events: recentEvents(20),
     logs: logText.length > 0 ? logText.split('\n').slice(-50) : [],
+    acks,
   };
-  const res = await fetch(env.DASHBOARD_URL.replace(/\/+$/, '') + '/api/ingest', {
+  const res = await fetch(api('/api/ingest'), {
     method: 'POST',
     headers: {
       'content-type': 'application/json',

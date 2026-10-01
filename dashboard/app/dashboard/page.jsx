@@ -1,9 +1,9 @@
 import { readSnapshot } from '@/lib/store';
-import DashboardView from '../components/DashboardView';
+import Board from '../components/Board';
 
 export const dynamic = 'force-dynamic';
 
 export default async function DashboardPage() {
   const snapshot = await readSnapshot();
-  return <DashboardView snapshot={snapshot} />;
+  return <Board initial={snapshot} />;
 }

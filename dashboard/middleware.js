@@ -9,5 +9,5 @@ export function middleware(req) {
 }
 
 export const config = {
-  matcher: ['/dashboard/:path*'],
+  matcher: ['/dashboard/:path*', '/api/setup/:path*', '/api/overview/:path*'],
 };

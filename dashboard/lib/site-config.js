@@ -5,19 +5,21 @@
 
 export const siteConfig = {
   name: 'Eternyx',
-  tagline: 'Moderation command center',
-  footer: 'Eternyx · hosted on Vercel · fed by the phone',
+  tagline: 'Discord Moderation & Server Command Center',
+  footer: 'Eternyx Core · Hosted 24/7 on Xiaomi 10 Prime · Cloud Dashboard on Vercel',
 
-  // Theme — any valid CSS color.
+  // Theme — Radiant Neon & Cyber Glass styling
   theme: {
-    background: '#07080f',
-    surface: 'rgba(255, 255, 255, 0.04)',
-    border: 'rgba(255, 255, 255, 0.09)',
-    text: '#e8eaf6',
-    textDim: '#8b90a8',
-    accent: '#7c5cff',   // primary — buttons, highlights, bars
-    accent2: '#22d3ee',  // secondary — gradients, live badge
-    danger: '#ff5470',
+    background: '#060814',
+    surface: 'rgba(14, 18, 36, 0.65)',
+    border: 'rgba(124, 92, 255, 0.22)',
+    text: '#f0f4fc',
+    textDim: '#8fa0c4',
+    accent: '#8b5cf6',   // Electric purple
+    accent2: '#06b6d4',  // Cyber cyan
+    accent3: '#ec4899',  // Neon magenta
+    danger: '#f43f5e',
+    success: '#10b981',
   },
 
   // Section visibility on the dashboard page.
