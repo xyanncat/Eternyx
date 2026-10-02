@@ -5,8 +5,8 @@
 
 export const siteConfig = {
   name: 'Eternyx',
-  tagline: 'Discord Moderation & Server Command Center',
-  footer: 'Eternyx Core · Hosted 24/7 on Xiaomi 10 Prime · Cloud Dashboard on Vercel',
+  tagline: 'Discord moderation command center',
+  footer: 'Eternyx core — always-on phone host with a cloud dashboard',
 
   // Theme — Radiant Neon & Cyber Glass styling
   theme: {

@@ -37,18 +37,13 @@ export default function LoginPage({ demoMode }) {
     <div className="login-wrap">
       <motion.div
         className="card login-card"
-        initial={{ opacity: 0, y: 26, scale: 0.97 }}
-        animate={{ opacity: 1, y: 0, scale: 1 }}
-        transition={{ duration: 0.55, ease: [0.22, 1, 0.36, 1] }}
+        initial={{ opacity: 0, y: 18 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.45, ease: [0.22, 1, 0.36, 1] }}
       >
-        <motion.div
-          className="login-logo"
-          initial={{ rotate: -8, scale: 0.8 }}
-          animate={{ rotate: 0, scale: 1 }}
-          transition={{ delay: 0.15, type: 'spring', stiffness: 200, damping: 14 }}
-        >
+        <div className="login-logo" aria-hidden="true">
           E
-        </motion.div>
+        </div>
         <h1>{siteConfig.name}</h1>
         <p className="sub">{siteConfig.tagline}</p>
         <form onSubmit={submit}>

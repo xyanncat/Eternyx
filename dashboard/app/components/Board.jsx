@@ -22,13 +22,22 @@ function dur(ms) {
 }
 
 const TABS = [
-  { id: 'overview', label: '📊 Overview', desc: 'Live telemetrics, usage & server status' },
-  { id: 'channels', label: '⚙️ Server Setup', desc: 'Configure channels, mod roles & hierarchy' },
-  { id: 'announcements', label: '📢 Announcements', desc: 'Broadcast embeds directly to any channel' },
-  { id: 'security', label: '🛡️ Guards & Channels', desc: 'Raid guard, anti-nuke & channel locks' },
-  { id: 'automod', label: '🤖 AutoMod Rules', desc: 'Discord native filters & word blocks' },
-  { id: 'audit', label: '📜 Logs & Results', desc: 'Command execution queue, cases & audit' },
+  { id: 'overview', label: 'Overview' },
+  { id: 'channels', label: 'Server setup' },
+  { id: 'announcements', label: 'Announcements' },
+  { id: 'security', label: 'Guards & channels' },
+  { id: 'automod', label: 'AutoMod' },
+  { id: 'audit', label: 'Logs & results' },
 ];
+
+// One short crossfade between panels — motion answers the tab switch,
+// nothing else on the page moves on its own.
+const panelFade = {
+  initial: { opacity: 0 },
+  animate: { opacity: 1 },
+  exit: { opacity: 0 },
+  transition: { duration: 0.18 },
+};
 
 export default function Board({ initial }) {
   const [activeTab, setActiveTab] = useState('overview');
@@ -107,7 +116,7 @@ export default function Board({ initial }) {
       });
       const data = await res.json();
       if (data.ok) {
-        showToast(`⚡ Command queued! Executed on phone within ~60s.`);
+        showToast(`Queued — the phone picks it up within a minute.`);
         poll();
       } else {
         showToast(data.error || 'Failed to dispatch command', true);
@@ -134,6 +143,8 @@ export default function Board({ initial }) {
   const logs = snapshot.logs || [];
   const maxCount = Math.max(1, ...usage.map((u) => u.count));
   const isDemo = Boolean(snapshot.demo);
+  const ramMb = bot.rssMb || 0;
+  const ramPct = Math.min(100, Math.round((ramMb / 256) * 100));
 
   return (
     <div className="dash">
@@ -153,13 +164,9 @@ export default function Board({ initial }) {
 
       {/* ── Top Header ────────────────────────────────────── */}
       <header className="dash-head">
-        <motion.div
-          className="login-logo"
-          whileHover={{ rotate: 10, scale: 1.05 }}
-          transition={{ type: 'spring', stiffness: 300 }}
-        >
+        <div className="login-logo" aria-hidden="true">
           E
-        </motion.div>
+        </div>
         <div>
           <h1>{siteConfig.name}</h1>
           <div className="sub">
@@ -171,16 +178,16 @@ export default function Board({ initial }) {
         <div className="head-actions">
           {isDemo ? (
             <span className="live-badge demo-badge-lg">
-              <span className="live-dot" style={{ background: 'var(--danger)' }} /> DEMO MODE
+              <span className="live-dot" style={{ background: 'var(--danger)' }} /> Demo data
             </span>
           ) : (
             <span className="live-badge">
-              <span className="live-dot" /> LIVE PHONE SYNC
+              <span className="live-dot" /> Live sync
             </span>
           )}
           {queue.length > 0 && (
             <span className="queue-chip">
-              ⏳ {queue.length} pending in queue
+              {queue.length} waiting on phone
             </span>
           )}
           <button className="ghost-btn" onClick={poll}>
@@ -192,18 +199,18 @@ export default function Board({ initial }) {
         </div>
       </header>
 
-      {/* ── Tab Navigation ────────────────────────────────── */}
-      <nav className="tabs">
+      {/* ── Tab rail ────────────────────────────────────── */}
+      <nav className="tabs" role="tablist" aria-label="Dashboard sections">
         {TABS.map((tab) => (
-          <motion.button
+          <button
             key={tab.id}
-            whileHover={{ scale: 1.02 }}
-            whileTap={{ scale: 0.98 }}
+            role="tab"
+            aria-selected={activeTab === tab.id}
             className={`tab ${activeTab === tab.id ? 'active' : ''}`}
             onClick={() => setActiveTab(tab.id)}
           >
             {tab.label}
-          </motion.button>
+          </button>
         ))}
       </nav>
 
@@ -212,51 +219,46 @@ export default function Board({ initial }) {
         <AnimatePresence mode="wait">
           {/* TAB 1: OVERVIEW */}
           {activeTab === 'overview' && (
-            <motion.div
-              key="overview"
-              initial={{ opacity: 0, y: 15 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: -10 }}
-              transition={{ duration: 0.25 }}
-            >
+            <motion.div key="overview" {...panelFade}>
               <div className="grid">
                 <div className="card stat">
-                  <div className="k">Bot Identity</div>
+                  <div className="k">Bot</div>
                   <div className="v small">{bot.username || 'Offline'}</div>
                   <div className="dim" style={{ fontSize: 12, marginTop: 4 }}>
-                    PID {bot.pid || 'Termux Host'}
+                    {bot.startedAt ? `Started ${ago(bot.startedAt)}` : 'Phone host'}
                   </div>
                 </div>
                 <div className="card stat">
-                  <div className="k">Phone RAM Footprint</div>
+                  <div className="k">Phone RAM</div>
                   <div className="v">
-                    {bot.rssMb || '76'} <span style={{ fontSize: 16 }}>MB</span>
+                    {ramMb || '—'} <span style={{ fontSize: 16 }}>MB</span>
                   </div>
-                  <div className="dim" style={{ fontSize: 12, marginTop: 4 }}>
-                    Strict cap: 256 MB
+                  <div className={`meter${ramPct > 75 ? ' hot' : ''}`} role="img" aria-label={`${ramMb} of 256 MB used`}>
+                    <span style={{ width: `${ramPct}%` }} />
                   </div>
+                  <div className="meter-note">{ramMb} of 256 MB host cap</div>
                 </div>
                 <div className="card stat">
-                  <div className="k">Host Uptime</div>
+                  <div className="k">Uptime</div>
                   <div className="v small">{dur(bot.uptimeMs || 0)}</div>
                   <div className="dim" style={{ fontSize: 12, marginTop: 4 }}>
-                    Xiaomi 10 Prime 24/7
+                    Phone host
                   </div>
                 </div>
                 <div className="card stat">
-                  <div className="k">Discord Gateway Ping</div>
+                  <div className="k">Gateway ping</div>
                   <div className="v">
-                    {bot.wsPingMs || '38'} <span style={{ fontSize: 16 }}>ms</span>
+                    {bot.wsPingMs || '—'} <span style={{ fontSize: 16 }}>ms</span>
                   </div>
                   <div className="dim" style={{ fontSize: 12, marginTop: 4 }}>
-                    Outbound WSS tunnel
+                    Outbound only
                   </div>
                 </div>
               </div>
 
               {/* Command usage bars */}
               <div className="card section">
-                <h2>📊 Command Volume · All Time</h2>
+                <h2>Command volume</h2>
                 {usage.length === 0 ? (
                   <div className="empty">No moderation commands logged yet.</div>
                 ) : (
@@ -294,33 +296,33 @@ export default function Board({ initial }) {
                 )}
               </div>
 
-              {/* Quick Quick Control Card */}
+              {/* Quick control shortcuts */}
               <div className="card section">
-                <h2>⚡ Quick Actions</h2>
+                <h2>Quick actions</h2>
                 <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
                   <button
                     className="btn small"
                     onClick={() => setActiveTab('channels')}
                   >
-                    Configure Channels & Roles
+                    Channels and roles
                   </button>
                   <button
                     className="btn small"
                     onClick={() => setActiveTab('announcements')}
                   >
-                    Draft Server Announcement
+                    New announcement
                   </button>
                   <button
                     className="btn small"
                     onClick={() => setActiveTab('security')}
                   >
-                    Raid & Security Controls
+                    Raid and security
                   </button>
                   <button
                     className="btn small"
                     onClick={() => setActiveTab('automod')}
                   >
-                    Manage AutoMod Rules
+                    AutoMod rules
                   </button>
                 </div>
               </div>
@@ -329,22 +331,16 @@ export default function Board({ initial }) {
 
           {/* TAB 2: SERVER & CHANNEL SETUP */}
           {activeTab === 'channels' && (
-            <motion.div
-              key="channels"
-              initial={{ opacity: 0, y: 15 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: -10 }}
-              transition={{ duration: 0.25 }}
-            >
+            <motion.div key="channels" {...panelFade}>
               <div className="panel-grid">
-                {/* Audit Log Channel assignment */}
+                {/* Audit log channel */}
                 <div className="card">
-                  <h2>📋 Audit Log Channel</h2>
+                  <h2>Audit log channel</h2>
                   <p className="dim" style={{ fontSize: 13, marginBottom: 14 }}>
-                    Choose the channel where Eternyx mirrors every moderation strike, case embed, and security alarm.
+                    Every moderation action and security alarm gets mirrored here.
                   </p>
                   <div className="field">
-                    <label>Designated Channel</label>
+                    <label>Channel</label>
                     <select
                       className="input"
                       value={selectedLogChannel}
@@ -365,21 +361,21 @@ export default function Board({ initial }) {
                       dispatchAction('set-log-channel', { id: selectedLogChannel })
                     }
                   >
-                    Assign Log Channel
+                    Assign log channel
                   </button>
                   <div className="form-note">
                     Current: {snapshot?.config?.logChannelId ? `<#${snapshot.config.logChannelId}>` : 'Not configured'}
                   </div>
                 </div>
 
-                {/* Moderator Roles assignment */}
+                {/* Moderator roles */}
                 <div className="card">
-                  <h2>🛡️ Moderator Roles</h2>
+                  <h2>Moderator roles</h2>
                   <p className="dim" style={{ fontSize: 13, marginBottom: 14 }}>
-                    Assign staff roles that are authorized to run moderation slash commands.
+                    Staff roles allowed to run moderation commands.
                   </p>
                   <div className="field">
-                    <label>Action Mode</label>
+                    <label>Update mode</label>
                     <div style={{ display: 'flex', gap: 10, marginBottom: 10 }}>
                       <label style={{ display: 'inline-flex', alignItems: 'center', gap: 5, fontSize: 13, cursor: 'pointer' }}>
                         <input
@@ -388,7 +384,7 @@ export default function Board({ initial }) {
                           checked={modRoleMode === 'set'}
                           onChange={() => setModRoleMode('set')}
                         />
-                        Replace Role List
+                        Replace list
                       </label>
                       <label style={{ display: 'inline-flex', alignItems: 'center', gap: 5, fontSize: 13, cursor: 'pointer' }}>
                         <input
@@ -397,12 +393,12 @@ export default function Board({ initial }) {
                           checked={modRoleMode === 'add'}
                           onChange={() => setModRoleMode('add')}
                         />
-                        Add to Existing Roles
+                        Add to list
                       </label>
                     </div>
                   </div>
                   <div className="field">
-                    <label>Role to Authorize</label>
+                    <label>Role</label>
                     <select
                       className="input"
                       value={selectedModRole}
@@ -426,10 +422,10 @@ export default function Board({ initial }) {
                       )
                     }
                   >
-                    {modRoleMode === 'set' ? 'Set as Primary Mod Role' : 'Add Moderator Role'}
+                    {modRoleMode === 'set' ? 'Set primary mod role' : 'Add moderator role'}
                   </button>
                   <div className="form-note">
-                    Active Mod Roles in DB: {snapshot?.config?.modRoleIds?.length || 0}
+                    Active mod roles: {snapshot?.config?.modRoleIds?.length || 0}
                   </div>
                 </div>
               </div>
@@ -438,21 +434,15 @@ export default function Board({ initial }) {
 
           {/* TAB 3: ANNOUNCEMENTS */}
           {activeTab === 'announcements' && (
-            <motion.div
-              key="announcements"
-              initial={{ opacity: 0, y: 15 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: -10 }}
-              transition={{ duration: 0.25 }}
-            >
+            <motion.div key="announcements" {...panelFade}>
               <div className="panel-grid">
                 <div className="card">
-                  <h2>📢 Send Server Announcement</h2>
+                  <h2>Send announcement</h2>
                   <p className="dim" style={{ fontSize: 13, marginBottom: 14 }}>
-                    Compose and broadcast an official embedded announcement via the bot.
+                    Broadcast an official embed through the bot.
                   </p>
                   <div className="field">
-                    <label>Destination Channel</label>
+                    <label>Channel</label>
                     <select
                       className="input"
                       value={annChannel}
@@ -467,7 +457,7 @@ export default function Board({ initial }) {
                     </select>
                   </div>
                   <div className="field">
-                    <label>Embed Header Title</label>
+                    <label>Title</label>
                     <input
                       className="input"
                       type="text"
@@ -477,7 +467,7 @@ export default function Board({ initial }) {
                     />
                   </div>
                   <div className="field">
-                    <label>Message Content (Markdown supported)</label>
+                    <label>Message (Markdown supported)</label>
                     <textarea
                       className="input"
                       placeholder="Type your server announcement here..."
@@ -497,15 +487,15 @@ export default function Board({ initial }) {
                       setAnnMessage('');
                     }}
                   >
-                    🚀 Broadcast Announcement
+                    Broadcast announcement
                   </button>
                 </div>
 
-                {/* Embed Live Visual Preview */}
+                {/* Embed preview */}
                 <div className="card">
-                  <h2>👁️ Live Embed Preview</h2>
+                  <h2>Embed preview</h2>
                   <p className="dim" style={{ fontSize: 13, marginBottom: 14 }}>
-                    Visual representation of how Discord members will see the embed.
+                    How members will see it in Discord.
                   </p>
                   <div
                     style={{
@@ -529,7 +519,7 @@ export default function Board({ initial }) {
                       {annMessage || 'Your announcement text will render here...'}
                     </p>
                     <div className="dim" style={{ fontSize: 11, marginTop: 14 }}>
-                      Case Preview · by @Eternyx · Eternyx Dev Center
+                      Preview — sent by Eternyx when you broadcast
                     </div>
                   </div>
                 </div>
@@ -539,19 +529,13 @@ export default function Board({ initial }) {
 
           {/* TAB 4: GUARDS & SECURITY */}
           {activeTab === 'security' && (
-            <motion.div
-              key="security"
-              initial={{ opacity: 0, y: 15 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: -10 }}
-              transition={{ duration: 0.25 }}
-            >
+            <motion.div key="security" {...panelFade}>
               <div className="panel-grid">
-                {/* Raid & Nuke settings */}
+                {/* Raid and anti-nuke */}
                 <div className="card">
-                  <h2>🛡️ Raid & Anti-Nuke Tuning</h2>
+                  <h2>Raid and anti-nuke</h2>
                   <div className="field">
-                    <label>Join Raid Threshold ({raidThreshold} joins / min)</label>
+                    <label>Join threshold ({raidThreshold} joins per minute)</label>
                     <input
                       type="range"
                       min="3"
@@ -561,7 +545,7 @@ export default function Board({ initial }) {
                       style={{ width: '100%', accentColor: 'var(--accent)' }}
                     />
                     <div className="dim" style={{ fontSize: 12, marginTop: 4 }}>
-                      Triggers join verification gate if members join faster than this.
+                      Faster joins than this raise the verification gate.
                     </div>
                   </div>
                   <button
@@ -571,16 +555,16 @@ export default function Board({ initial }) {
                       dispatchAction('set-raid-threshold', { joins: raidThreshold })
                     }
                   >
-                    Save Threshold
+                    Save threshold
                   </button>
 
                   <hr style={{ margin: '20px 0', borderColor: 'var(--border)' }} />
 
                   <div className="toggle-row">
                     <div>
-                      <strong style={{ fontSize: 14 }}>Auto-Timeout Mass Ban Actors</strong>
+                      <strong style={{ fontSize: 14 }}>Auto-timeout mass-ban actors</strong>
                       <div className="dim" style={{ fontSize: 12 }}>
-                        Automatically applies 1h timeout on compromised admin burst.
+                        Timeout for 1 hour when one actor bans at attack speed.
                       </div>
                     </div>
                     <label className="switch">
@@ -598,11 +582,11 @@ export default function Board({ initial }) {
                   </div>
                 </div>
 
-                {/* Channel Lock & Slowmode */}
+                {/* Channel locks and slowmode */}
                 <div className="card">
-                  <h2>🔒 Channel Lockdown & Slowmode</h2>
+                  <h2>Channel locks and slowmode</h2>
                   <div className="field">
-                    <label>Target Channel</label>
+                    <label>Channel</label>
                     <select
                       className="input"
                       value={targetChannel}
@@ -626,7 +610,7 @@ export default function Board({ initial }) {
                         dispatchAction('lock-channel', { channelId: targetChannel })
                       }
                     >
-                      🔒 Lock Channel
+                      Lock channel
                     </button>
                     <button
                       className="btn small"
@@ -635,12 +619,12 @@ export default function Board({ initial }) {
                         dispatchAction('unlock-channel', { channelId: targetChannel })
                       }
                     >
-                      🔓 Unlock Channel
+                      Unlock channel
                     </button>
                   </div>
 
                   <div className="field">
-                    <label>Set Slowmode (Seconds: 0 = Off, Max: 21600)</label>
+                    <label>Slowmode seconds (0 turns it off, max 21600)</label>
                     <div style={{ display: 'flex', gap: 10 }}>
                       <input
                         className="input"
@@ -671,19 +655,13 @@ export default function Board({ initial }) {
 
           {/* TAB 5: AUTOMOD RULES */}
           {activeTab === 'automod' && (
-            <motion.div
-              key="automod"
-              initial={{ opacity: 0, y: 15 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: -10 }}
-              transition={{ duration: 0.25 }}
-            >
+            <motion.div key="automod" {...panelFade}>
               <div className="panel-grid">
-                {/* Create Custom Keyword Rule */}
+                {/* Custom keyword rule */}
                 <div className="card">
-                  <h2>🚫 Block Keywords & Phrases</h2>
+                  <h2>Block keywords</h2>
                   <div className="field">
-                    <label>Rule Identifier</label>
+                    <label>Rule name</label>
                     <input
                       className="input"
                       type="text"
@@ -693,7 +671,7 @@ export default function Board({ initial }) {
                     />
                   </div>
                   <div className="field">
-                    <label>Blocked Words (one per line, wildcards *like* this)</label>
+                    <label>Blocked words, one per line (wildcards like *this*)</label>
                     <textarea
                       className="input"
                       placeholder="badword1&#10;*phishing.ru*&#10;fakediscord"
@@ -714,19 +692,19 @@ export default function Board({ initial }) {
                       setKwRuleName('');
                     }}
                   >
-                    Deploy Native Keyword Rule
+                    Deploy keyword rule
                   </button>
                 </div>
 
-                {/* Instant Presets */}
+                {/* Ready-made protections */}
                 <div className="card">
-                  <h2>🛡️ One-Click Native Protections</h2>
+                  <h2>Ready-made protections</h2>
                   <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                       <div>
-                        <strong>Block Discord Invites</strong>
+                        <strong>Block invites</strong>
                         <div className="dim" style={{ fontSize: 12 }}>
-                          Blocks discord.gg links in all public chat channels.
+                          Blocks discord.gg links in public channels.
                         </div>
                       </div>
                       <button
@@ -740,7 +718,7 @@ export default function Board({ initial }) {
 
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                       <div>
-                        <strong>Discord Pre-Configured Presets</strong>
+                        <strong>Preset filters</strong>
                         <div className="dim" style={{ fontSize: 12 }}>
                           Blocks slurs, severe profanity, and explicit text.
                         </div>
@@ -756,9 +734,9 @@ export default function Board({ initial }) {
 
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                       <div>
-                        <strong>Mention Spam Shield</strong>
+                        <strong>Mention spam shield</strong>
                         <div className="dim" style={{ fontSize: 12 }}>
-                          Blocks mass @mention attacks (Limit: {mentionLimit}).
+                          Blocks mass mentions (limit {mentionLimit}).
                         </div>
                       </div>
                       <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
@@ -786,9 +764,9 @@ export default function Board({ initial }) {
 
                   <hr style={{ margin: '20px 0', borderColor: 'var(--border)' }} />
 
-                  <h2>Active AutoMod Rules ({automodRules.length})</h2>
+                  <h2>Active AutoMod rules ({automodRules.length})</h2>
                   {automodRules.length === 0 ? (
-                    <div className="empty">No native rules fetched yet.</div>
+                    <div className="empty">No native rules yet.</div>
                   ) : (
                     <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
                       {automodRules.map((r) => (
@@ -824,25 +802,19 @@ export default function Board({ initial }) {
 
           {/* TAB 6: AUDIT, QUEUE & LIVE RESULTS */}
           {activeTab === 'audit' && (
-            <motion.div
-              key="audit"
-              initial={{ opacity: 0, y: 15 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: -10 }}
-              transition={{ duration: 0.25 }}
-            >
-              {/* Live Execution Results from Phone */}
+            <motion.div key="audit" {...panelFade}>
+              {/* Action results from the phone */}
               <div className="card section">
-                <h2>⚡ Recent Dashboard Action Results (From Phone)</h2>
+                <h2>Recent action results</h2>
                 {results.length === 0 ? (
-                  <div className="empty">No recent web actions recorded.</div>
+                  <div className="empty">No actions from this dashboard yet.</div>
                 ) : (
                   <table>
                     <thead>
                       <tr>
                         <th>Status</th>
                         <th>Action</th>
-                        <th>Outcome Detail</th>
+                        <th>Detail</th>
                         <th>Time</th>
                       </tr>
                     </thead>
@@ -864,18 +836,18 @@ export default function Board({ initial }) {
                 )}
               </div>
 
-              {/* Moderation Cases */}
+              {/* Moderation cases */}
               <div className="card section">
-                <h2>⚖️ Recent Moderation Cases</h2>
+                <h2>Recent moderation cases</h2>
                 {cases.length === 0 ? (
-                  <div className="empty">No moderation cases recorded in SQLite yet.</div>
+                  <div className="empty">No moderation cases recorded yet.</div>
                 ) : (
                   <table>
                     <thead>
                       <tr>
-                        <th>Case #</th>
+                        <th>Case</th>
                         <th>Type</th>
-                        <th>Target User</th>
+                        <th>Target</th>
                         <th>Reason</th>
                         <th>Status</th>
                         <th>When</th>
@@ -903,17 +875,17 @@ export default function Board({ initial }) {
                 )}
               </div>
 
-              {/* Security Events */}
+              {/* Security events */}
               <div className="card section">
-                <h2>🚨 Security Alarms & Tamper Events</h2>
+                <h2>Security events</h2>
                 {events.length === 0 ? (
-                  <div className="empty">All quiet — no security events triggered.</div>
+                  <div className="empty">No security events.</div>
                 ) : (
                   <table>
                     <thead>
                       <tr>
                         <th>Event</th>
-                        <th>Details</th>
+                        <th>Detail</th>
                         <th>Time</th>
                       </tr>
                     </thead>
@@ -932,11 +904,11 @@ export default function Board({ initial }) {
                 )}
               </div>
 
-              {/* Raw Log Output */}
+              {/* Phone log */}
               <div className="card section">
-                <h2>🖥️ Live Phone Log Tail</h2>
+                <h2>Phone log</h2>
                 <div className="logpre">
-                  {logs.length > 0 ? logs.join('\n') : 'Waiting for phone bot to push logs...'}
+                  {logs.length > 0 ? logs.join('\n') : 'Waiting for the phone to push logs...'}
                 </div>
               </div>
             </motion.div>

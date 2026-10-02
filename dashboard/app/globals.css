@@ -9,10 +9,12 @@
   --accent: #8b5cf6;       /* Radiant electric purple */
   --accent-glow: #a855f7;
   --accent2: #06b6d4;      /* Cyber cyan */
-  --accent3: #ec4899;      /* Neon magenta */
+  --accent3: #ec4899;      /* Neon magenta — reserved for queue/alert emphasis */
   --success: #10b981;      /* Emerald green */
   --danger: #f43f5e;       /* Hot rose/crimson */
   --warning: #f59e0b;
+  --font-body: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  --font-display: 'Space Grotesk', 'Inter', -apple-system, sans-serif;
 }
 
 * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -20,12 +22,13 @@
 html, body {
   background: var(--bg);
   color: var(--text);
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Inter', sans-serif;
+  font-family: var(--font-body);
   min-height: 100vh;
   overflow-x: hidden;
 }
 
-/* ── Vibrant animated ambient backdrop ─────────────────────── */
+/* ── Ambient aurora: the one decorative element. Slow and dim — it should
+   feel like weather behind glass, not a screensaver competing for attention. */
 .bg-orbs {
   position: fixed;
   inset: 0;
@@ -37,8 +40,8 @@ html, body {
   position: absolute;
   border-radius: 50%;
   filter: blur(110px);
-  opacity: 0.42;
-  animation: drift 20s ease-in-out infinite alternate;
+  opacity: 0.3;
+  animation: drift 38s ease-in-out infinite alternate;
 }
 .bg-orbs span:nth-child(1) {
   width: 50vw;
@@ -53,8 +56,9 @@ html, body {
   background: radial-gradient(circle, var(--accent2) 0%, rgba(6, 182, 212, 0) 70%);
   bottom: -15%;
   right: -10%;
-  animation-delay: -6s;
-  animation-duration: 25s;
+  opacity: 0.22;
+  animation-delay: -12s;
+  animation-duration: 46s;
 }
 .bg-orbs span:nth-child(3) {
   width: 32vw;
@@ -62,18 +66,19 @@ html, body {
   background: radial-gradient(circle, var(--accent3) 0%, rgba(236, 72, 153, 0) 70%);
   top: 35%;
   left: 50%;
-  opacity: 0.28;
-  animation-delay: -12s;
-  animation-duration: 30s;
+  opacity: 0.18;
+  animation-delay: -24s;
+  animation-duration: 54s;
 }
 @keyframes drift {
-  from { transform: translate(0, 0) scale(1) rotate(0deg); }
-  to   { transform: translate(8vw, -6vh) scale(1.18) rotate(30deg); }
+  from { transform: translate(0, 0) scale(1); }
+  to   { transform: translate(4vw, -3vh) scale(1.08); }
 }
 
 main, .page-wrap, .dash, .login-wrap { position: relative; z-index: 1; }
 
-/* ── Vibrant Glass Cards ─────────────────────────────────── */
+/* ── Glass cards. Quiet by default; the border glow on hover is the only
+   flourish, and it answers the pointer. ─────────────────────────── */
 .card {
   background: var(--surface);
   border: 1px solid var(--border);
@@ -82,25 +87,25 @@ main, .page-wrap, .dash, .login-wrap { position: relative; z-index: 1; }
   backdrop-filter: blur(20px);
   -webkit-backdrop-filter: blur(20px);
   box-shadow: 0 16px 45px rgba(0, 0, 0, 0.5), inset 0 1px 0 rgba(255, 255, 255, 0.08);
-  transition: transform 0.2s cubic-bezier(0.2, 0.8, 0.2, 1), border-color 0.2s ease, box-shadow 0.2s ease;
+  transition: border-color 0.2s ease, box-shadow 0.2s ease;
 }
 .card:hover {
   border-color: rgba(139, 92, 246, 0.45);
   box-shadow: 0 20px 50px rgba(0, 0, 0, 0.6), 0 0 25px rgba(139, 92, 246, 0.15);
 }
 .card h2 {
-  font-size: 13px;
-  letter-spacing: 0.12em;
-  text-transform: uppercase;
-  color: var(--accent2);
+  font-family: var(--font-display);
+  font-size: 16px;
+  font-weight: 650;
+  letter-spacing: 0;
+  color: var(--text);
   margin-bottom: 14px;
-  font-weight: 700;
   display: flex;
   align-items: center;
   gap: 8px;
 }
 
-/* ── Floating Toast Alerts ───────────────────────────────── */
+/* ── Floating toast alerts ───────────────────────────────── */
 .toast {
   position: fixed;
   top: 24px;
@@ -127,7 +132,7 @@ main, .page-wrap, .dash, .login-wrap { position: relative; z-index: 1; }
   color: #fecdd3;
 }
 
-/* ── Animated Brand Logo ─────────────────────────────────── */
+/* ── Brand sigil ─────────────────────────────────────────── */
 .login-logo {
   width: 64px;
   height: 64px;
@@ -135,31 +140,39 @@ main, .page-wrap, .dash, .login-wrap { position: relative; z-index: 1; }
   border-radius: 20px;
   display: grid;
   place-items: center;
+  font-family: var(--font-display);
   font-size: 32px;
-  font-weight: 900;
+  font-weight: 700;
   color: #fff;
-  background: linear-gradient(135deg, var(--accent) 0%, var(--accent3) 50%, var(--accent2) 100%);
+  background: linear-gradient(135deg, var(--accent) 0%, var(--accent2) 100%);
   box-shadow: 0 8px 30px rgba(139, 92, 246, 0.5), inset 0 1px 1px rgba(255, 255, 255, 0.4);
-  cursor: pointer;
 }
+.dash-head .login-logo { width: 52px; height: 52px; font-size: 26px; margin: 0; }
 
 /* ── Login screen ────────────────────────────────────────── */
 .login-wrap { min-height: 100vh; display: grid; place-items: center; padding: 24px; }
 .login-card { width: min(420px, 100%); text-align: center; padding: 44px 34px; }
-.login-card h1 { font-size: 28px; font-weight: 800; letter-spacing: -0.02em; margin-bottom: 6px; }
+.login-card h1 {
+  font-family: var(--font-display);
+  font-size: 30px;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  margin-bottom: 6px;
+}
 .login-card p.sub { color: var(--dim); font-size: 14px; margin-bottom: 28px; }
 
-/* ── Inputs & Selects ────────────────────────────────────── */
+/* ── Inputs & selects ────────────────────────────────────── */
 .input {
   width: 100%;
   padding: 13px 16px;
   border-radius: 12px;
   font-size: 14px;
+  font-family: inherit;
   background: rgba(6, 8, 20, 0.7);
   border: 1px solid var(--border);
   color: var(--text);
   outline: none;
-  transition: all 0.2s ease;
+  transition: border-color 0.2s ease, box-shadow 0.2s ease, background 0.2s ease;
 }
 .input:focus {
   border-color: var(--accent2);
@@ -185,7 +198,8 @@ textarea.input {
   line-height: 1.5;
 }
 
-/* ── Vibrant Buttons ─────────────────────────────────────── */
+/* ── Buttons. One static gradient for the primary action; magenta is
+   reserved for destructive/lock actions via inline style, not the default. */
 .btn {
   width: 100%;
   padding: 13px 18px;
@@ -193,23 +207,17 @@ textarea.input {
   border: 0;
   border-radius: 12px;
   font-size: 14px;
-  font-weight: 700;
+  font-weight: 650;
+  font-family: inherit;
   color: #fff;
   cursor: pointer;
-  background: linear-gradient(135deg, var(--accent) 0%, var(--accent3) 50%, var(--accent2) 100%);
-  background-size: 200% 200%;
-  animation: gradientShift 6s ease infinite;
+  background: linear-gradient(135deg, var(--accent) 0%, var(--accent2) 100%);
   box-shadow: 0 8px 24px rgba(139, 92, 246, 0.35);
   transition: transform 0.15s ease, filter 0.2s ease, box-shadow 0.2s ease;
 }
-@keyframes gradientShift {
-  0% { background-position: 0% 50%; }
-  50% { background-position: 100% 50%; }
-  100% { background-position: 0% 50%; }
-}
 .btn:hover:not(:disabled) {
   transform: translateY(-2px);
-  filter: brightness(1.15);
+  filter: brightness(1.12);
   box-shadow: 0 12px 30px rgba(139, 92, 246, 0.5);
 }
 .btn:active:not(:disabled) { transform: translateY(0); }
@@ -229,16 +237,21 @@ textarea.input {
   border-radius: 10px;
   font-size: 13px;
   font-weight: 600;
+  font-family: inherit;
   cursor: pointer;
-  transition: all 0.2s ease;
+  transition: border-color 0.2s ease, color 0.2s ease, background 0.2s ease;
 }
 .ghost-btn:hover {
   border-color: var(--accent);
   color: #fff;
   background: rgba(139, 92, 246, 0.15);
 }
+.btn:focus-visible, .ghost-btn:focus-visible, .tab:focus-visible, .home-btn:focus-visible {
+  outline: 2px solid var(--accent2);
+  outline-offset: 2px;
+}
 
-/* ── Badges ──────────────────────────────────────────────── */
+/* ── Status badges: single-word signals, uppercase is functional here ── */
 .live-badge {
   display: inline-flex;
   align-items: center;
@@ -257,11 +270,11 @@ textarea.input {
   height: 8px;
   border-radius: 50%;
   background: var(--accent2);
-  animation: pulse 1.8s infinite;
+  animation: pulse 2.4s infinite;
 }
 @keyframes pulse {
-  0%, 100% { opacity: 1; box-shadow: 0 0 0 0 rgba(6, 182, 212, 0.7); }
-  50% { opacity: 0.5; box-shadow: 0 0 0 6px rgba(6, 182, 212, 0); }
+  0%, 100% { opacity: 1; box-shadow: 0 0 0 0 rgba(6, 182, 212, 0.6); }
+  50% { opacity: 0.6; box-shadow: 0 0 0 6px rgba(6, 182, 212, 0); }
 }
 .demo-badge-lg {
   color: var(--danger);
@@ -292,7 +305,7 @@ textarea.input {
   border-radius: 999px;
 }
 
-/* ── Dashboard Layout ────────────────────────────────────── */
+/* ── Dashboard layout ────────────────────────────────────── */
 .dash { max-width: 1140px; margin: 0 auto; padding: 32px 20px 80px; }
 .dash-head {
   display: flex;
@@ -301,65 +314,89 @@ textarea.input {
   margin-bottom: 24px;
   flex-wrap: wrap;
 }
-.dash-head .login-logo { width: 52px; height: 52px; font-size: 26px; margin: 0; }
-.dash-head h1 { font-size: 26px; font-weight: 800; letter-spacing: -0.02em; }
+.dash-head h1 {
+  font-family: var(--font-display);
+  font-size: 26px;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+}
 .dash-head .sub { color: var(--dim); font-size: 13px; margin-top: 2px; }
 .head-spacer { flex: 1; }
 .head-actions { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
 
-/* ── Tabs ────────────────────────────────────────────────── */
+/* ── Tab rail: a segmented control, not six separate buttons ── */
 .tabs {
   display: flex;
-  gap: 8px;
+  gap: 4px;
   margin-bottom: 26px;
   overflow-x: auto;
-  padding-bottom: 4px;
+  padding: 4px;
   scrollbar-width: thin;
+  background: rgba(6, 8, 20, 0.55);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
 }
 .tab {
+  flex: 1 0 auto;
   padding: 10px 18px;
-  border-radius: 12px;
-  border: 1px solid var(--border);
-  background: rgba(14, 18, 36, 0.5);
+  border-radius: 10px;
+  border: 1px solid transparent;
+  background: transparent;
   color: var(--dim);
   font-size: 13.5px;
   font-weight: 600;
+  font-family: inherit;
   cursor: pointer;
   white-space: nowrap;
-  transition: all 0.2s cubic-bezier(0.2, 0.8, 0.2, 1);
+  transition: color 0.2s ease, background 0.2s ease, box-shadow 0.2s ease;
 }
-.tab:hover {
-  color: var(--text);
-  border-color: rgba(139, 92, 246, 0.5);
-  background: rgba(22, 28, 56, 0.8);
-}
+.tab:hover { color: var(--text); background: rgba(139, 92, 246, 0.12); }
 .tab.active {
   color: #fff;
-  background: linear-gradient(135deg, rgba(139, 92, 246, 0.4), rgba(6, 182, 212, 0.3));
-  border-color: var(--accent);
+  background: linear-gradient(135deg, rgba(139, 92, 246, 0.45), rgba(6, 182, 212, 0.32));
   box-shadow: 0 4px 20px rgba(139, 92, 246, 0.35);
 }
 
-/* ── Stat Cards Grid ─────────────────────────────────────── */
+/* ── Stat tiles: quieter than cards — no hover lift, values in display type.
+   One tile (RAM) carries a capacity meter against the 256 MB host cap. ── */
 .grid {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
   gap: 16px;
   margin-bottom: 24px;
 }
-.stat .k { color: var(--dim); font-size: 12px; letter-spacing: 0.1em; text-transform: uppercase; font-weight: 600; }
+.stat { transition: none; }
+.stat:hover { border-color: var(--border); box-shadow: 0 16px 45px rgba(0, 0, 0, 0.5), inset 0 1px 0 rgba(255, 255, 255, 0.08); }
+.stat .k { color: var(--dim); font-size: 13px; font-weight: 550; }
 .stat .v {
-  font-size: 30px;
-  font-weight: 900;
+  font-family: var(--font-display);
+  font-size: 32px;
+  font-weight: 700;
+  letter-spacing: -0.02em;
   margin-top: 6px;
-  background: linear-gradient(135deg, #ffffff 30%, var(--accent2) 100%);
-  -webkit-background-clip: text;
-  background-clip: text;
-  color: transparent;
+  color: var(--text);
 }
 .stat .v.small { font-size: 20px; }
+.meter {
+  height: 6px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.08);
+  margin-top: 12px;
+  overflow: hidden;
+}
+.meter > span {
+  display: block;
+  height: 100%;
+  border-radius: 999px;
+  background: linear-gradient(90deg, var(--accent2), var(--accent));
+  transition: width 0.6s ease;
+}
+.meter.hot > span { background: linear-gradient(90deg, var(--warning), var(--danger)); }
+.meter-note { font-size: 12px; color: var(--dim); margin-top: 6px; }
 
-/* ── Panels & Forms ──────────────────────────────────────── */
+/* ── Panels & forms ──────────────────────────────────────── */
 .panel-grid {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
@@ -369,11 +406,9 @@ textarea.input {
 .field { margin-bottom: 16px; }
 .field label {
   display: block;
-  font-size: 12px;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
+  font-size: 13px;
   color: var(--dim);
-  font-weight: 600;
+  font-weight: 550;
   margin-bottom: 7px;
 }
 .form-note { font-size: 12px; color: var(--dim); margin-top: 8px; font-weight: 500; }
@@ -387,6 +422,7 @@ textarea.input {
 }
 .switch { position: relative; width: 48px; height: 26px; flex-shrink: 0; }
 .switch input { opacity: 0; width: 0; height: 0; }
+.switch input:focus-visible + .track { outline: 2px solid var(--accent2); outline-offset: 2px; }
 .switch .track {
   position: absolute;
   inset: 0;
@@ -412,16 +448,17 @@ textarea.input {
 }
 .switch input:checked + .track::before { transform: translateX(22px); }
 
-/* ── Tables & Bars ───────────────────────────────────────── */
-table { width: 100%; border-collapse: collapse; font-size: 13.5px; }
+/* ── Tables & bars ───────────────────────────────────────── */
+.card.section { overflow-x: auto; }
+table { width: 100%; border-collapse: collapse; font-size: 13.5px; min-width: 560px; }
 th {
   text-align: left;
   color: var(--dim);
-  font-size: 11px;
-  letter-spacing: 0.1em;
-  text-transform: uppercase;
+  font-size: 12.5px;
+  font-weight: 600;
   padding: 10px;
   border-bottom: 1px solid var(--border);
+  white-space: nowrap;
 }
 td { padding: 12px 10px; border-bottom: 1px solid rgba(124, 92, 255, 0.12); }
 tr:last-child td { border-bottom: 0; }
@@ -436,7 +473,7 @@ tr:last-child td { border-bottom: 0; }
 .bar {
   height: 100%;
   border-radius: 8px;
-  background: linear-gradient(90deg, var(--accent) 0%, var(--accent3) 50%, var(--accent2) 100%);
+  background: linear-gradient(90deg, var(--accent) 0%, var(--accent2) 100%);
   box-shadow: 0 0 12px rgba(139, 92, 246, 0.6);
 }
 
@@ -451,6 +488,7 @@ tr:last-child td { border-bottom: 0; }
   background: rgba(139, 92, 246, 0.18);
   color: var(--accent);
   border: 1px solid rgba(139, 92, 246, 0.35);
+  white-space: nowrap;
 }
 .badge.danger {
   background: rgba(244, 63, 94, 0.18);
@@ -486,32 +524,45 @@ tr:last-child td { border-bottom: 0; }
 /* ── Error & 404 pages ───────────────────────────────────── */
 .err-wrap { min-height: 100vh; display: grid; place-items: center; text-align: center; padding: 24px; }
 .err-code {
+  font-family: var(--font-display);
   font-size: clamp(90px, 22vw, 190px);
-  font-weight: 900;
+  font-weight: 700;
   line-height: 1;
-  background: linear-gradient(135deg, var(--accent), var(--accent3), var(--accent2));
+  letter-spacing: -0.04em;
+  background: linear-gradient(135deg, var(--accent), var(--accent2));
   -webkit-background-clip: text;
   background-clip: text;
   color: transparent;
-  animation: floaty 3.5s ease-in-out infinite;
   filter: drop-shadow(0 18px 40px rgba(139, 92, 246, 0.45));
 }
-@keyframes floaty {
-  0%, 100% { transform: translateY(0) rotate(-1.5deg); }
-  50% { transform: translateY(-16px) rotate(1.5deg); }
-}
-.err-wrap h1 { font-size: 24px; font-weight: 800; margin: 16px 0 8px; }
+.err-wrap h1 { font-size: 24px; font-weight: 700; margin: 16px 0 8px; }
 .err-wrap p { color: var(--dim); margin-bottom: 28px; max-width: 440px; font-size: 15px; }
 .home-btn {
   display: inline-block;
   text-decoration: none;
   color: #fff;
-  font-weight: 700;
+  font-weight: 650;
   font-size: 14px;
-  background: linear-gradient(135deg, var(--accent), var(--accent3), var(--accent2));
+  background: linear-gradient(135deg, var(--accent), var(--accent2));
   padding: 14px 32px;
   border-radius: 12px;
   box-shadow: 0 8px 25px rgba(139, 92, 246, 0.4);
   transition: transform 0.15s ease, filter 0.2s ease;
 }
-.home-btn:hover { transform: translateY(-2px); filter: brightness(1.15); }
+.home-btn:hover { transform: translateY(-2px); filter: brightness(1.12); }
+
+/* ── Small screens: stack the header, keep the rail scrollable ── */
+@media (max-width: 640px) {
+  .dash { padding: 20px 14px 64px; }
+  .dash-head { gap: 12px; }
+  .head-actions { width: 100%; }
+  .login-card { padding: 34px 22px; }
+  .toast { left: 14px; right: 14px; }
+}
+
+/* ── Respect reduced motion: aurora stills, signals go static ── */
+@media (prefers-reduced-motion: reduce) {
+  .bg-orbs span { animation: none; opacity: 0.18; }
+  .live-dot { animation: none; }
+  .btn, .card, .tab, .ghost-btn, .home-btn, .meter > span { transition: none; }
+}
