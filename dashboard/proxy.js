@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 
-export function middleware(req) {
+export function proxy(req) {
   const accessKey = process.env.DASHBOARD_ACCESS_KEY ?? 'demo';
   if (req.cookies.get('eternyx_auth')?.value === accessKey) {
     return NextResponse.next();
