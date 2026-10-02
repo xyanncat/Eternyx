@@ -120,6 +120,6 @@ If you ever need more headroom: the guild is small, so lowering
 npm test
 ```
 
-24 tests cover validation, embed caps, the hierarchy permission engine,
+25 tests cover validation, embed caps, the hierarchy permission engine,
 cooldowns, and the storage layer (append-only transitions, guild scoping,
-config merging) — run against an in-memory database.
+config merging, usage stats) — run against an in-memory database.

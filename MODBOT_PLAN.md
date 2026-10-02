@@ -1,6 +1,6 @@
 # Eternyx Moderation Bot — Design & Deployment Plan
 
-Status: plan (no code yet)
+Status: implemented & live (bot + Vercel setup board deployed 2026-09-30; see MEMORY.md).
 Target host: secondary smartphone (Xiaomi, MIUI) via Termux
 Hard requirements: **all interactions are slash commands** · **every response is an embed** · security-first
 
@@ -25,7 +25,7 @@ Non-goals: web dashboard, multi-server sharding, paid services. One guild (the d
 | Layer | Choice | Why (lazy-but-correct) |
 |---|---|---|
 | Runtime | Node.js LTS + **discord.js v14** | Native slash commands & intents, lowest-friction moderation API (timeouts, audit log), runs cleanly on ARM64 Termux, ~80–150 MB RSS |
-| Storage | **SQLite via better-sqlite3** | File-based, zero daemon, synchronous = simple, lives in Termux app-private storage |
+| Storage | **SQLite via `node:sqlite` (stdlib)** | File-based, zero daemon, no native compile on Termux ARM64 |
 | Secrets | `.env` via dotenv | Nothing in code, nothing in git |
 | Content filtering | **Discord native AutoMod** (managed by the bot via API) | Don't reimplement keyword/invite/mention spam scanning on a phone — Discord does it for free at gateway level; bot only manages rules and logs escalation events |
 | Join-raid / anti-nuke | Bot-side (own logic) | Not covered by native AutoMod |
@@ -50,7 +50,7 @@ Rejected alternatives: Python/discord.py (fine, but d.js is the richer choice fo
   │  │  commands/      moderation/ info/ config/ system/   │ │
   │  │  lib/           embeds · perms · cases · audit      │ │
   │  │  engines/       raidGuard · nukeGuard · selfGuard   │ │
-  │  │  storage/       better-sqlite3 (cases, config, log) │ │
+  │  │  storage/       node:sqlite (cases, config, log) │ │
   │  └──────────────────────────────────────────────────────┘ │
   └──────────────────────────────────────────────────────────┘
                     │ outbound HTTPS/WSS only — no inbound ports
@@ -111,7 +111,7 @@ Refuse — with a red embed, no exception — when the target is: the bot itself
 
 ### 4.10 Dependency & supply chain
 - `package-lock.json` committed; deps pinned to exact versions.
-- `npm audit` before every deploy; no dep with >0 runtime needs beyond `discord.js`, `better-sqlite3`, `dotenv`.
+- `npm audit` before every deploy; runtime deps are `discord.js` + `dotenv` only (storage is `node:sqlite` stdlib).
 - Updates are manual: pull, `npm ci`, restart via `sv restart bot`.
 
 ### 4.11 Failure policy — fail closed
@@ -251,14 +251,24 @@ eternyx-bot/
 ```sh
 #!/data/data/com.termux/files/usr/bin/sh
 cd /data/data/com.termux/files/home/eternyx-bot
-exec termux-wake-lock node src/index.js 2>> logs/err.log
+# wake-lock is a separate statement — NEVER `exec termux-wake-lock ...`
+# (it ignores args and exits, so node would never start).
+termux-wake-lock >/dev/null 2>&1 || true
+exec node --max-old-space-size=256 src/index.js 2>> logs/err.log
 ```
 
 `~/.termux/boot/start-services.sh`:
 ```sh
 #!/data/data/com.termux/files/usr/bin/sh
+# SVDIR is not exported in every boot context — set it explicitly.
+export SVDIR="/data/data/com.termux/files/usr/var/service"
 termux-wake-lock
+# runsvdir may not be running yet in the boot context — ensure it is.
+pgrep -x runsvdir >/dev/null 2>&1 || setsid runsvdir "$SVDIR" >/dev/null 2>&1 &
+sleep 2
 sv up bot
+# The runit sshd service (sshd -D -e) fails on this phone — start the daemon directly.
+pgrep -x sshd >/dev/null 2>&1 || sshd
 ```
 
 ### 9.3 Daily ops
@@ -293,7 +303,7 @@ Security-relevant code review focus (per the standing toolchain): the permission
 | Phone lost → token theft | Device encryption + screen lock; rehearsed token rotation (§9.3) |
 | Mod account hijack | Hard caps, cooldowns, write-ahead cases, owner-gated lockdown — damage is bounded and traced |
 | False nukeGuard trigger | Auto-retaliation opt-in (default alert-only), all events logged |
-| better-sqlite3 native build breaks on Android | Prebuilt ARM64 binaries cover current Node LTS; fallback plan: `node:sqlite` (Node 22+) |
+| Node < 22.5 without `node:sqlite` | Engine requires Node ≥ 22.5; Termux installs `nodejs-lts` per deploy script |
 | Battery degradation from 24/7 charging | Acceptable on a secondary device; heat management in §9.1 |
 
 ---
