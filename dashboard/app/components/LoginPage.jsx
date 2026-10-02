@@ -36,43 +36,52 @@ export default function LoginPage({ demoMode }) {
   return (
     <div className="login-wrap">
       <motion.div
-        className="card login-card"
+        className="card login-split"
         initial={{ opacity: 0, y: 18 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.45, ease: [0.22, 1, 0.36, 1] }}
       >
-        <div className="login-logo" aria-hidden="true">
-          E
+        <div className="login-brand">
+          <div className="login-logo" aria-hidden="true">E</div>
+          <h1>{siteConfig.name}</h1>
+          <p>{siteConfig.tagline}. Live telemetry from the phone host, and every server control in one place.</p>
+          <ul className="login-points">
+            <li><span className="tick" aria-hidden="true">✓</span>Health, usage, cases, and alarms at a glance</li>
+            <li><span className="tick" aria-hidden="true">✓</span>Dispatch config — the phone executes within a minute</li>
+            <li><span className="tick" aria-hidden="true">✓</span>Key-gated, encrypted at rest, no inbound ports</li>
+          </ul>
         </div>
-        <h1>{siteConfig.name}</h1>
-        <p className="sub">{siteConfig.tagline}</p>
-        <form onSubmit={submit}>
-          <input
-            className="input"
-            type="password"
-            placeholder="Access key"
-            value={key}
-            onChange={(e) => setKey(e.target.value)}
-            autoFocus
-            autoComplete="current-password"
-          />
-          <motion.button
-            className="btn"
-            type="submit"
-            disabled={busy || key.length === 0}
-            whileTap={{ scale: 0.98 }}
+        <div className="login-form">
+          <h2>Sign in</h2>
+          <p className="sub">Enter the dashboard access key to continue.</p>
+          <form onSubmit={submit}>
+            <input
+              className="input"
+              type="password"
+              placeholder="Access key"
+              value={key}
+              onChange={(e) => setKey(e.target.value)}
+              autoFocus
+              autoComplete="current-password"
+            />
+            <motion.button
+              className="btn"
+              type="submit"
+              disabled={busy || key.length === 0}
+              whileTap={{ scale: 0.98 }}
+            >
+              {busy ? 'Checking…' : 'Enter dashboard'}
+            </motion.button>
+          </form>
+          <motion.div
+            className="error-text"
+            animate={error ? { x: [0, -7, 7, -4, 4, 0] } : { x: 0 }}
+            transition={{ duration: 0.4 }}
           >
-            {busy ? 'Checking…' : 'Enter dashboard'}
-          </motion.button>
-        </form>
-        <motion.div
-          className="error-text"
-          animate={error ? { x: [0, -7, 7, -4, 4, 0] } : { x: 0 }}
-          transition={{ duration: 0.4 }}
-        >
-          {error}
-        </motion.div>
-        {demoMode && <span className="demo-badge">demo mode · any key opens · seed data</span>}
+            {error}
+          </motion.div>
+          {demoMode && <span className="demo-badge">demo mode · any key opens · seed data</span>}
+        </div>
       </motion.div>
     </div>
   );
