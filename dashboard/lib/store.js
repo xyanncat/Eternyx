@@ -40,8 +40,11 @@ function decrypt(b64) {
 async function readEncryptedJson(path, fallback) {
   if (!deriveKey()) return fallback;
   try {
-    const res = await get(path, { access: 'public' });
-    if (res.statusCode !== 200 || !res.stream) return fallback;
+    // useCache:false bypasses the CDN — the phone overwrites these same
+    // pathnames every 60s, and a cached read would serve a stale (e.g.
+    // empty) queue forever, so setup commands would never execute.
+    const res = await get(path, { access: 'public', useCache: false });
+    if (!res || res.statusCode !== 200 || !res.stream) return fallback;
     const text = await new Response(res.stream).text();
     return JSON.parse(decrypt(text));
   } catch {
@@ -59,6 +62,7 @@ export async function writeSnapshot(data) {
     access: 'public', // holds ciphertext only — public URL is meaningless without the key
     allowOverwrite: true,
     contentType: 'text/plain',
+    cacheControlMaxAge: 60, // floor: phone overwrites this every 60s, don't let the CDN sit on it
   });
 }
 
@@ -84,6 +88,7 @@ export async function enqueueCommand({ action, params, createdBy }) {
     access: 'public',
     allowOverwrite: true,
     contentType: 'text/plain',
+    cacheControlMaxAge: 60, // floor: queue changes on every dispatch/ack, keep CDN copies fresh
   });
   return command;
 }
@@ -97,6 +102,7 @@ export async function acknowledgeCommands(acks = []) {
     access: 'public',
     allowOverwrite: true,
     contentType: 'text/plain',
+    cacheControlMaxAge: 60,
   });
   const byId = new Map(acks.map((a) => [a.id, a]));
   const existing = await readEncryptedJson(RESULTS_PATH, []);
@@ -112,6 +118,7 @@ export async function acknowledgeCommands(acks = []) {
     access: 'public',
     allowOverwrite: true,
     contentType: 'text/plain',
+    cacheControlMaxAge: 60,
   });
   return { queue, results };
 }
