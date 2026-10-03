@@ -60,6 +60,7 @@ export async function writeSnapshot(data) {
   if (!deriveKey()) throw new Error('DASHBOARD_INGEST_KEY not configured');
   await put(SNAPSHOT_PATH, encrypt(JSON.stringify(data)), {
     access: 'public', // holds ciphertext only — public URL is meaningless without the key
+    addRandomSuffix: false, // overwrite in place: the store must hold exactly this one object
     allowOverwrite: true,
     contentType: 'text/plain',
     cacheControlMaxAge: 60, // floor: phone overwrites this every 60s, don't let the CDN sit on it
@@ -86,6 +87,7 @@ export async function enqueueCommand({ action, params, createdBy }) {
   if (queue.length > MAX_QUEUE) queue.splice(0, queue.length - MAX_QUEUE);
   await put(QUEUE_PATH, encrypt(JSON.stringify(queue)), {
     access: 'public',
+    addRandomSuffix: false, // overwrite in place — see writeSnapshot
     allowOverwrite: true,
     contentType: 'text/plain',
     cacheControlMaxAge: 60, // floor: queue changes on every dispatch/ack, keep CDN copies fresh
@@ -100,6 +102,7 @@ export async function acknowledgeCommands(acks = []) {
   const queue = (await readQueue()).filter((c) => !ackIds.has(c.id));
   await put(QUEUE_PATH, encrypt(JSON.stringify(queue)), {
     access: 'public',
+    addRandomSuffix: false, // overwrite in place — see writeSnapshot
     allowOverwrite: true,
     contentType: 'text/plain',
     cacheControlMaxAge: 60,
@@ -116,6 +119,7 @@ export async function acknowledgeCommands(acks = []) {
   ].slice(-MAX_RESULTS);
   await put(RESULTS_PATH, encrypt(JSON.stringify(results)), {
     access: 'public',
+    addRandomSuffix: false, // overwrite in place — see writeSnapshot
     allowOverwrite: true,
     contentType: 'text/plain',
     cacheControlMaxAge: 60,
