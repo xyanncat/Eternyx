@@ -1,60 +1,241 @@
 ---
 name: eternyx-modbot-project
-description: Eternyx Discord moderation bot — implemented & live-verified;
-  hosted on user's Xiaomi 6GB/64GB phone via Termux; low-RAM tuned; phone access
-  via SSH into Termux
+description: Eternyx Discord moderation bot — COMPLETE and live on the user's
+  Xiaomi phone (Termux); 24 slash commands, full guard suite, button control
+  panel, auto-roles, announcement mentions, phone-hosted web dashboard with
+  instant ~3s command dispatch
 metadata:
   node_type: memory
   type: project
   originSessionId: sess_cd7540c2-fee4-4261-80ec-d146b3aa0780
   memoryDir: memory/
-  updated: 2026-10-02
+  updated: 2026-10-03
 ---
 
-**Functional check (2026-10-02, PC side):** `npm test` 25/25 pass; `node --check` clean on all 52 files under `src/`; `npm audit` 0 vulnerabilities; all 23 slash-command modules + 9 event handlers + dashboard routes (`ingest`, `commands`, `setup`, `overview`) present. Root `.env` has DISCORD_TOKEN/CLIENT_ID/GUILD_ID set (OWNER_IDS empty = OK, server owner is implicit owner). Phone-side live state per 2026-09-30 section below — re-verify via `/botstatus` + `https://eternyx-dashboard.vercel.app` before claiming live.
+> Read this before touching Eternyx. It records the complete architecture,
+> every decision that matters, all verified state, and the gotchas that must
+> never be relearned. If a fact here conflicts with the code, trust the code
+> and update this file.
 
-The Eternyx workspace (E:\github\Eternyx) is a Discord **moderation bot** ("Eternyx") for the dev server "Eternity | ROYAL'S PARADISE | Dev" (guild 1444582621417046071). Hard requirements: all slash commands, embed-only responses. Hosted 24/7 on the user's **Xiaomi phone, 6GB RAM / 64GB storage (Android/MIUI)** via Termux + termux-services.
+# Eternyx — project memory (complete record, 2026-10-03)
 
-**Status (2026-09-30): DEPLOYED AND LIVE on the phone.** Bot runs supervised (runit, stable pid, **~96MB RSS** verified) at `~/eternyx-bot` on the phone with `.env`; repo history lives on the PC only (5 commits on `main`). 23 slash commands registered on the guild. Key decisions/deviations: MessageContent intent NOT enabled; server owner is an implicit bot owner (no OWNER_IDS needed); storage uses `node:sqlite` (zero native deps); required slash options must precede optional ones (Discord 50035).
+## 1. What it is
 
-**Phone access (working):** PC key `~/.ssh/eternyx_phone` → `ssh -i ~/.ssh/eternyx_phone -p 8022 localhost '<cmd>'` after `adb forward tcp:8022 tcp:8022`; adb at `%LOCALAPPDATA%\platform-tools-tmp\platform-tools\adb.exe`; phone serial 005302500508 (Redmi Note 10S "selene", Android 13). Termux doze-whitelisted via `dumpsys deviceidle whitelist +com.termux`. Close the channel with `pkill sshd` when done.
+Discord **moderation bot** for the dev server "Eternity | ROYAL'S PARADISE | Dev"
+(guild `1444582621417046071`). Hard requirements: **slash commands only**,
+**embed-only responses** (including errors), security-first. Hosted 24/7 on the
+user's **Xiaomi Redmi Note 10S "selene", Android 13, 6 GB RAM** via Termux +
+termux-services. Repo: `E:\github\Eternyx` → GitHub `xyanncat/Eternyx`, branch
+`main` (HEAD 2026-10-03: 12507ca + memory commits). Bot token in phone
+`~/eternyx-bot/.env`; never in git.
 
-**Phone gotchas learned (do not relearn):** `sv` needs `SVDIR=$PREFIX/var/service` exported (SSH/boot contexts skip profile.d); `termux-wake-lock` must NEVER be exec'd in the runit run script (it ignores args and exits → node never starts); Android `input text` silently eats `%s` (use plain echo for key installs via adb typing); cronie package needed for crond; Termux sshd accepts any username (key/password decides); `termux-battery-status` HANGS without the Termux:API app (guard with `timeout 3`); Mimosa PreToolUse hook false-positives on interaction→storage dataflow — workaround: count/wrap at load time in index.js (local-module data only) or batch via in-memory queue.
+**Final status: complete and live** — 24 slash commands registered, full guard
+suite active, control panel posted, auto-roles configured, dashboard hosted on
+the phone with ~3 s command dispatch, 29/29 tests passing, `npm audit` 0 vulns.
 
-**Usage panel (user request 2026-09-30):** `deploy/termux/panel.sh` — live Termux dashboard (bot status/RSS/battery, top commands, recent cases, security events, 5s refresh, `--once` flag). Bot counts usage via `command_stats` table + lib/stats.js 30s flush queue, wrapped in index.js at command load. Run: `sh ~/eternyx-bot/deploy/termux/panel.sh`.
+## 2. Architecture
 
-**Glitch fix (2026-09-30):** 16 foreign GLOBAL slash commands (setup/embed/invite/leaderboard/rank/purge/tempban…) were registered on the application by some previous project using this token — caused dead/duplicate commands. Cleared via `PUT applicationCommands {body:[]}`; bot stays guild-scoped. If globals reappear → someone else is using the token → rotate immediately.
+```
+PC (controls, git, builds) --adb/ssh--> Xiaomi phone (Termux)
+                                          ├─ runit: bot    → node src/index.js (heap cap 256MB)
+                                          ├─ runit: web    → standalone Next.js :3000
+                                          ├─ runit: tunnel → cloudflared quick-tunnel (public URL)
+                                          └─ runit: crond  → nightly DB backup
+```
 
-**Reboot test (2026-09-30):** Termux:Boot v0.8.1 (GitHub build, signature-matched) installed via adb; real phone reboot executed. Findings: (1) MIUI Autostart for **com.termux.boot** is NOT enabled → Termux:Boot never fired, Termux didn't start — **user must enable Autostart for "Termux:Boot" in MIUI Security app** (adb cannot set it, appops rejects BOOT_COMPLETED); (2) the runit `sshd` service (`sshd -D -e`) fails on this phone — boot script now starts sshd as a plain daemon (`pgrep -x sshd || sshd`); (3) boot script also self-heals runsvdir; (4) adb `input` does nothing when the screen is off/locked — wake with `input keyevent KEYCODE_WAKEUP; wm dismiss-keyguard` (no PIN on this phone); (5) bot correctly logged `previous shutdown was clean: false` after the hard reboot. Bot restored and running; recovery drill = wake screen → open Termux → `sh ~/.termux/boot/start-services.sh`.
+- **Bot runtime:** Node ≥ 22.5, discord.js 14.27.0 (pinned), `node:sqlite`
+  (stdlib — zero native deps), dotenv. Intents: Guilds + GuildMembers +
+  GuildModeration. **MessageContent OFF** (native AutoMod handles content).
+  Caches slimmed (message/presence/thread/voice 0; members capped 500) + hourly
+  sweepers for low RAM.
+- **Storage:** `data/eternyx.db` (node:sqlite). Tables: `cases` (append-only,
+  write-ahead PENDING→ACTIVE/REVOKED), `config` (per-guild; all fields in §5),
+  `events` (security log), `command_stats` (usage). Schema migrations are
+  additive in `initDb` (`migrate()` adds missing columns by constant name).
+- **Web dashboard:** Next.js 16.3.7 standalone in `~/eternyx-web`; storage
+  backend switchable: `STORE_BACKEND=file` (phone, local encrypted files under
+  `data-web/`) or default blob (Vercel). Same AES-256-GCM payloads either way
+  (key = sha256(DASHBOARD_INGEST_KEY), see `lib/vault.js`).
+- **Command loop:** site POST `/api/setup` → encrypted queue → bot pulls every
+  60 s **and instantly on SIGUSR1** (web signals pidfile `/proc`-verified) →
+  `src/lib/commands.js` executes allowlisted actions → acks via `/api/ingest` →
+  results shown in Logs tab. Outbound-only; no inbound ports on the bot.
 
-**Vercel dashboard (2026-09-30, DEPLOYED):** live at **https://eternyx-dashboard.vercel.app** from private GitHub repo **xyanncat/Eternyx** (gh auth: xyanncat; Vercel CLI auth: kazutoz02s-projects, token in %APPDATA%\com.vercel.cli\Data\auth.json). Next.js 16.3.7 in `dashboard/` subfolder; project **Root Directory=dashboard** set via API; Git auto-deploy VERIFIED (push → production deploy ~30s). Storage: **Vercel Blob** (`eternyx-snap-blob`, static read-write token credential mode) holding an **AES-256-GCM-encrypted snapshot** (key = sha256 of DASHBOARD_INGEST_KEY) — public blob URL is ciphertext-only. Keys in `dashboard/.env.local` (gitignored): DASHBOARD_ACCESS_KEY (user login) + DASHBOARD_INGEST_KEY (phone push, also in phone .env). Bot pushes every 60s via src/lib/report.js → /api/ingest; verified LIVE with real guild data. Gotchas: @vercel/blob get() needs `{access:'public'}` and returns `res.stream` (ReadableStream); CLI env add is one-env-per-call; edge-config/kv creation isn't CLI-supported (edge-config experiment fully cleaned up); Vercel secrets added via CLI aren't pullable by env pull.
+## 3. Slash commands (24, all embed responses)
 
-**CDN-stale fix (2026-10-02, commit d6f6c1e):** setup commands dispatched from the site never executed — `lib/store.js` read blobs via `get(path, {access:'public'})`, which serves CDN-cached copies while the phone overwrites the same pathnames every 60s, so the phone kept pulling a stale empty queue. Fix: all reads use `useCache:false` (single choke point `readEncryptedJson`) + `cacheControlMaxAge:60` (the floor) on all puts. Deploys only via git push; never `vercel --prod` from `dashboard/`.
+- **Moderation:** /ban /softban /unban /kick /timeout /untimeout /warn
+  /warnings /case /clear /slowmode /lock /unlock
+- **Security:** /panel (post control panel), /lockdown on|off (owner)
+- **Config (owner):** /config set log-channel|control-channel|mod-role|
+  auto-role|raid-threshold|nuke-auto-action, /config add mod-role, /config show,
+  /automod (keyword|invite|preset|mention-spam|remove|list), /dbbackup
+- **Info/system:** /userinfo /serverinfo /avatar /ping /botstatus /help
 
-**Blob pile-up (2026-10-03, commit 9ba9b00):** store accumulated thousands of objects because `put()` never passed `addRandomSuffix:false` — every 60s push minted a new suffixed blob instead of overwriting the 3 fixed pathnames (burns Blob storage + ops, likely fed the 402). Fix: all 4 puts pin `addRandomSuffix:false` + `allowOverwrite:true` → store holds exactly snapshot/commands/results. Orphan cleanup is manual: Vercel dashboard → Storage → delete everything except the 3 live pathnames (local tokens are expired, CLI list/del can't auth).
+Key decisions: server owner is an implicit bot owner (OWNER_IDS not required
+for rights — but §6 pinning uses OWNER_IDS for DMs); required slash options must
+precede optional ones (Discord 50035).
 
-**Phone-hosted web (2026-10-03, commit 45c3b4b):** public URL via cloudflared quick-tunnel (URL changes on tunnel restart; bot always uses 127.0.0.1:3000). Stack: standalone Next bundle at ~/eternyx-web (server.js, shipped by deploy/termux/ship-web.sh), runit services `web` + `tunnel` (setup-web.sh), STORE_BACKEND=file + DATA_DIR=~/eternyx-web/data, keys in ~/eternyx-web/.env.web (ingest key reused from bot .env; access key is a USER-FIXED value set 2026-10-03 — stored only on the phone, never rotate it, never commit it). Phone lessons: SSH needs **127.0.0.1 not localhost** (IPv6 quirk); **/tmp does not exist** (use $HOME for temp files); Termux has no `which` (use `command -v`); avoid nested-quote ssh one-liners — ship .sh files and run them instead. Verified live: bot pushes → snapshot.bin, login+overview 200, queue drains.
+## 4. Guards & engines (the protection core)
 
-**Vercel 402 incident (2026-10-03):** site served `402 DEPLOYMENT_DISABLED` ("Payment required") — the Vercel account/project got disabled on the billing side, NOT a code bug. Likely cause: usage meters tripped (10s dashboard polling + 60s phone pushes + Blob ops on Hobby limits). Mitigation committed (6ff4c53): overview poller 10s → 60s to match phone cadence. Re-enable only via vercel.com billing/usage (raise cap, upgrade, or wait for cycle reset) — pushes queue until then. Confirmed account-wide 2026-10-03: all 7 projects (eternyx-dashboard, royal-paradise, ei-point-dashboard, eternyx, saber-saint, portfolio, tui) return 402; our Blob churn likely helped trip the cap. Note: the phone bot is unaffected (Discord gateway is direct); only web monitoring + setup dispatch are down while disabled.
+- **raidGuard** (`engines/raidGuard.js`): join-burst detection ≥ raidThreshold/min
+  → raises verification level to High + alerts. Also: **account-age screening**
+  (<7 d joined → log; <24 h → owner DM) and **bot-join alerts**.
+- **nukeGuard**: mass bans (per-actor AND guild-wide ≥5/min → alert; optional
+  auto-timeout 1 h when `nuke_auto_action` on) and mass channel deletes (≥3/min).
+- **selfGuard**: alerts when the bot's role loses any REQUIRED permission
+  (includes ManageRoles for auto-role), when its role is deleted or changed, when
+  **@everyone gains dangerous permissions**, and on audit entries targeting the bot.
+- **dangerWatch**: AuditLogEvent-based — BotAdd, WebhookCreate, kick bursts
+  (≥3/min/actor), role-delete bursts (≥3/min) → log channel + owner DMs.
+- **guildUpdate**: name/icon/banner/owner/verification-level changes → alert
+  (owner change & verification drop also DM owners).
+- **autoRole** (`engines/autoRole.js`): on join, humans → autoRoleUserId, bots →
+  autoRoleBotId. Failure-proofed: checks ManageRoles + hierarchy + managed;
+  alerts once/hour with the exact fix. Runs BEFORE raidGuard in guildMemberAdd.
+- **lockdown** (`lib/lockdown.js`): locks all public text channels; **persists
+  state** (lockdown_active + per-channel previous SendMessages value in
+  lockdown_channels) → unlock does an **exact restore**; `ready.js` reconciles
+  on boot so a restart never silently lifts protection. Verified byte-identical
+  overwrite masks end to end.
+- **Alerts** (`lib/alerts.js`): `alertRecipients` = OWNER_IDS when set (pins the
+  list exactly — currently the master `1479589523426902208` ONLY), else
+  configured owners + guild owner. `alertOwners` returns delivered count.
 
-**Auto-roles (2026-10-03):** granted on join by `engines/autoRole.js` (humans → autoRoleUserId, bots → autoRoleBotId; both set: "New Worlder" 1472935152421306603 / "Pirates" 1544560111865827338). Failures (no ManageRoles, hierarchy, managed role) alert-dedup once/hour to log + owner DMs. Verified: bot has ManageRoles (bit 28) and highest role position 20 > 12/13. Config via `/config set auto-role kind role`, dashboard action `set-auto-role` (Server setup tab card). `ManageRoles` added to selfGuard REQUIRED so its loss alerts. `guildMemberAdd` runs autoRole BEFORE raidGuard.
+## 5. Config model (per guild, in `config` table)
 
-**DM pinning + test-alert (2026-10-03):** security/tamper DMs go ONLY to the master (1479589523426902208) — `OWNER_IDS` on the phone .env pins the recipient list exactly (when set, alertRecipients = OWNER_IDS only; when empty, cfg owners + guild owner). alertOwners now returns delivery count; new dashboard action `test-alert` sends a proof embed to the log channel + DMs and reports `N/M DM(s) delivered` — verified live 1/1. Command rights unchanged (guild owner still owner). Moderation target DMs (ban/kick notices) are separate and unaffected.
+logChannelId · modRoleIds · ownerIds · raidThreshold (default 10) ·
+nukeAutoAction (0/1) · controlPanelChannelId · controlPanelMessageId ·
+lockdownActive (0/1) · lockdownChannels (JSON `[{id,prev}]`) ·
+autoRoleUserId · autoRoleBotId.
+Live values: log `1555862906397270047` (#eternyx-logs), mod role
+`1472934739034767453` (@Yonko), raid 4/min, nuke auto-action on, control
+`1555862852940865647` (#eternyx-control), auto-role user `1472935152421306603`
+(@New Worlder), auto-role bot `1544560111865827338` (@Pirates).
 
-**Announcement mentions (2026-10-03):** announce action takes optional `mentionRoleIds`/`mentionUserIds` (≤5 snowflakes each, validated; stale IDs dropped at resolve time); message content carries `<@&id>`/`<@id>` with an explicit `allowedMentions` allowlist (parse: [] so nothing else can ping — @everyone text in an announcement is inert). Dashboard Announcements tab: role + user pickers (members list added to snapshot, capped 200, humans only, refreshed via `guild.members.fetch()` throttled to every 10 min in report.js — cache alone only holds online members). Preview shows mention chips. Tests: test/announce.test.js (29 total).
+## 6. Control panel + DM pinning
 
-**Server protection suite (2026-10-03):** ADDED — `/panel` posts a button-driven control panel (posted live in #eternyx-control 1555862852940865647, message 1555871244078030859): Lockdown ON/OFF buttons (owner-only, same lib as /lockdown) + Status (mods). `lib/lockdown.js` = state persisted in config (lockdown_active/lockdown_channels), EXACT restore of each channel's previous @everyone SendMessages (verified byte-identical deny masks 1049600 → 1051648 → 1049600), boot-time reconciliation in ready.js so a restart never silently lifts protection. Dashboard actions added: set-control-channel, post-panel, lockdown-on, lockdown-off (bot dispatcher + site route allowlist + Guards tab card). New guards: raidGuard now screens account age (<7d log, <24h owner ping) and alerts on bot joins; selfGuard watches @everyone dangerous-perm escalation; new dangerWatch engine alerts on BotAdd/WebhookCreate audit entries, kick bursts (≥3/min/actor), role-delete bursts (≥3/min); guildUpdate alerts on name/icon/owner/verification changes. Config got 4 new columns (migrated additively). 26 tests pass. Registered 24 slash commands.
+- **/panel** posts a persistent button panel to #eternyx-control (live message
+  `1555871244078030859`): **Lockdown ON/OFF** (owner-only) + **Status** (mods).
+  Buttons re-authorize per click, reuse the exact /lockdown lib, refresh the
+  panel embed after every toggle, and every action is audit-logged.
+- **Security DMs go ONLY to the master** (`1479589523426902208`) — via
+  `OWNER_IDS` pin in the phone `.env`. Verified delivery 1/1.
+- **test-alert** dashboard action: proof embed → log channel + DMs, reports
+  `N/M DM(s) delivered`. Use it after any alert-config change.
+- Moderation target DMs (ban/kick notices) are separate and only fire when a
+  moderator opts in on that action.
 
-**AutoMod fix (2026-10-03, deployed to phone):** dashboard AutoMod buttons showed `Invalid Form Body actions[1].metadata.channel_id[BASE_TYPE_REQUIRED]` — root cause: discord.js expects `metadata: { channel: <resolvable> }` (it resolves to channel_id itself); `channelId` is silently dropped. Also Discord allows ONE rule per trigger type (1 preset [4], 1 spam [5] per guild) and the guild already has manual rules ("Block Commonly Flagged Words" etc., creator 1225057223340986401), so all four buttons are now idempotent: keyword/invite/mention-spam match by rule name and edit in place, preset reports the existing rule as already active. Verified live: all four dispatch → ok in ~2.5s. Old FAILED rows in Logs & Results stay as history.
+## 7. Announcements
 
-**Design v3 SIGNAL (2026-10-03, commit 40a2215, other session):** ADOPTED as the current UI — ink/lime brutalist theme (dot-grid base, acid-lime/magenta/cyan/amber, hazard strips, hard offset shadows), Syne + Archivo + JetBrains Mono, lucide icons, NumberFlow animated stats, app/icon.svg favicon. Deps: framer-motion → motion, +@number-flow/react +lucide-react, dropped edge-config/kv. Functional core preserved (poll/dispatch/queue/tablist); phone bundle reshipped + instant dispatch re-verified at 3.2s. Vercel project restored — auto-deploy live again. Supersedes v2 below. **Design v2 (2026-10-02, commit 5ddff99):** ops-console redesign — sidebar shell with status card, Discord-blurple primary (#5865f2) + cyan signal, magenta removed entirely; split login (brand panel + form); pending-queue strip; spinning sync state; solid buttons, row-hover tables, danger-variant lock button. Palette lives in `lib/site-config.js` theme AND `app/globals.css` :root — change both together. neon-glass identity kept, generic tells removed — Space Grotesk display + Inter body via next/font, sentence-case copy with no emoji chrome, tab rail is a segmented control (role=tablist), single 180ms panel crossfade, static button gradients, RAM capacity meter vs 256MB cap, focus-visible rings, prefers-reduced-motion kill-switch, tables scroll on mobile; dead DashboardView.jsx deleted. **Next 16: `middleware.js` → `proxy.js` with `export function proxy` (codemod per node_modules/next/dist/docs); a file named proxy.js exporting `middleware` is silently inert — auth gating disappears with no error (caught live 2026-10-02).** Deploys only via git push; never `vercel --prod` from `dashboard/`.
+- Dashboard Announcements tab: channel + title + message, **role picker** and
+  **user picker** (members list in snapshot — humans only, cap 200, refreshed by
+  throttled `guild.members.fetch()` every 10 min because cache holds online only).
+- Mentions ride in message content (`<@&id>`/`<@id>`) with an **explicit
+  allowedMentions allowlist** and `parse: []` — nothing else can ping; stale IDs
+  dropped at resolve time. Validation: ≤5 snowflake IDs per list.
+- Live #world-news / #eternyx logos etc.: images are NOT wired into the
+  dashboard UI; image embeds were done one-off via phone REST scripts using
+  `attachment://` with the PNG uploaded as a real attachment (pattern lives in
+  this file; re-use it if needed).
+- **Role must be `mentionable:true`** for a role ping to fire — @New Worlder was
+  un-mentionable and got flipped (PATCH role) before the announcement pinged.
 
-**Instant dispatch (2026-10-03, commits 9a28bab/18e5d36/248d9ca):** dashboard changes apply in ~3s, no 60s wait — web sends SIGUSR1 to the bot (pidfile data/bot.pid, BOT_PID_FILE env, /proc-verified) the moment a command is queued; bot runs its cycle immediately with overlap guard. Lessons: NEVER gate on `process.platform` in Next.js server code — the bundler folds it to the BUILD machine's OS (PC win32 shipped, wake silently skipped); the /proc read IS the Linux check. Wake outcomes log to stderr (`[wake] …` in err.log). Verified live: dispatch → executed in 3.3s.
+## 8. Dashboard (SIGNAL design v3)
 
-**Setup board (2026-10-01, LIVE & e2e-verified, commit 86c3d87):** The site is a full **setup board**, not just monitoring. `dashboard/app/components/Board.jsx` = tabbed UI (Overview / Server Setup / Announcements / Guards & Channels / AutoMod / Logs & Results) with vibrant neon-glass theme (electric purple `#8b5cf6` / cyber cyan `#06b6d4` / neon magenta, animated gradient buttons + ambient orbs in globals.css). Bidirectional command loop: site POST `/api/setup` → encrypted queue in Blob → phone GET `/api/commands` every 60s → `src/lib/commands.js` executes (14-action allowlist, snowflake/range validation, fails closed, every cmd → `dashboard_cmd` event row) → acks back via `/api/ingest` → queue drained + results appended. Overview endpoint `/api/overview` returns snapshot+queue+results (middleware-cookie-guarded); phone sends channels/roles/automodRules/config in snapshot. **Verified live:** set-raid-threshold 10→15 dispatched from site, phone executed it, config shows 15, queue drained, result row ok:true. Full 14 actions: set/add log channel & mod roles, raid threshold, nuke auto-action, announce, slowmode, lock/unlock, 4 automod rule types + remove.
+- **Design:** ink/lime brutalist — dot-grid base, acid-lime/magenta/cyan/amber,
+  hazard strips, hard offset shadows; Syne + Archivo + JetBrains Mono; lucide
+  icons; NumberFlow animated stats; `app/icon.svg`. Theme tokens live in BOTH
+  `lib/site-config.js` and `app/globals.css` — change together. (v1 neon-glass →
+  v2 blurple ops-console → v3 SIGNAL, commits 988372d/5ddff99/40a2215.)
+- **Tabs:** Overview / Server setup (log channel, mod roles, auto-roles) /
+  Announcements / Guards & channels (raid threshold, nuke action, per-channel
+  lock+slowmode, **Server lockdown card**) / AutoMod / Logs & results (dispatch
+  results, cases, security events, phone log tail).
+- **Dashboard actions (20, bot dispatcher `src/lib/commands.js`):** set-log-channel,
+  set-mod-role, add-mod-role, set-raid-threshold, set-nuke-auto-action,
+  set-control-channel, post-panel, lockdown-on/off, test-alert, set-auto-role,
+  announce, set-slowmode, lock-channel, unlock-channel, automod-keyword,
+  automod-invite, automod-preset, automod-mention-spam, automod-remove. All
+  param-validated (snowflakes/ranges), fail closed, every cmd →
+  `dashboard_cmd` event row. **The site route (`dashboard/app/api/setup/route.js`)
+  has its own action allowlist — adding a bot action requires updating BOTH.**
+- **Realtime:** instant dispatch (~3 s) via SIGUSR1 wake; otherwise 60 s poll.
+  Web reports every 60 s (snapshot: bot stats, channels, roles, members,
+  automodRules, config — all encrypted).
+- Access flow: login key (`DASHBOARD_ACCESS_KEY`, user-fixed value, phone-only)
+  → httpOnly cookie → proxy.js gates /dashboard + /api/overview + /api/setup.
 
-**Pending follow-ups:** (1) rotate secrets — BOTH the bot token AND the dashboard `DASHBOARD_ACCESS_KEY` were pasted in plaintext chat (access key given to user 2026-09-30; stored in `dashboard/.env.local`). Key rotation: generate new → `vercel env add DASHBOARD_ACCESS_KEY production` in `dashboard/` + update `.env.local` → redeploy; the phone's `DASHBOARD_INGEST_KEY` is a separate secret (also chat-exposed) — never swap the two; (2) full Mimosa deep scan not completed (library-source limits) — don't claim security-certified; (3) **user: enable MIUI Autostart for Termux:Boot** (Security app → Autostart) so the boot chain fires on real reboots; (4) phone had a transient DNS outage for discord.com (self-healed via runit retry loop) — if it recurs, the phone's proxy/network routing needs attention (VpnNetworkProvider active on the phone).
+## 9. Deployment & ops
 
-**Hosting reality (user correction 2026-10-02):** bot lives on the phone ONLY and stays online permanently — treat disconnects/resource pressure as non-concerns, not design drivers. The phone has ample RAM/storage; do not add keepalives, auto-ping, or similar machinery. The Vercel web side is activity-driven (60s phone pushes) and needs no keepalive either — "LIVE" simply means recent push activity.
-**Why:** the SSH/adb access workflow and phone gotchas recur every session; hosting itself is stable per user (phone always online, ample resources) — never engineer for disconnects or add keepalives.
-**How to apply:** Remote ops = ssh command above; bot updates = tar+scp from PC then `SVDIR=$PREFIX/var/service sv restart bot`. Don't introduce servers/dashboards/prefix commands; never write the token into committed files.
+- **Phone access (working):** `adb forward tcp:8022 tcp:8022` (adb at
+  `%LOCALAPPDATA%\platform-tools-tmp\platform-tools\adb.exe`, serial
+  005302500508) then `ssh -i ~/.ssh/eternyx_phone -p 8022 **127.0.0.1**`.
+- **Bot update:** tar+scp `src/` → extract into `~/eternyx-bot` →
+  `SVDIR=$PREFIX/var/service sv restart bot`. New commands also need
+  `npm run deploy-commands` ON THE PHONE.
+- **Web update:** build on PC (`npm run build`) → stage
+  `.next/standalone/*` + `.next/static` → tar+scp → extract to `~/eternyx-web`
+  → `sv restart web`. Scripts: `deploy/termux/ship-web.sh` /
+  `deploy/termux/setup-web.sh` (runit services bot/web/tunnel, boot hook,
+  nightly backup).
+- **Public URL:** `grep -o 'https://[^ ]*trycloudflare.com' ~/eternyx-web/tunnel.log | tail -1`
+  (rotates on tunnel restart; the bot always uses 127.0.0.1:3000).
+- **Usage panel:** `sh ~/eternyx-bot/deploy/termux/panel.sh` (--once flag).
+- Repo history is PC-only; the phone has no git — syncs are tar/scp.
+
+## 10. Gotchas — NEVER relearn
+
+**Termux/phone:** SSH needs 127.0.0.1 not localhost (IPv6 quirk) · `/tmp` does
+not exist (use $HOME) · no `which` (use `command -v`) · avoid nested quotes in
+ssh one-liners — ship a .sh and run it · `sv` needs explicit
+`SVDIR=$PREFIX/var/service` (boot/SSH skip profile.d) · `termux-wake-lock` must
+never be exec'd in runit run scripts · runit sshd service fails — use plain
+daemon; boot script self-heals runsvdir · `input text` eats `%s`; screen off
+blocks adb input · `termux-battery-status` hangs without Termux:API (guard with
+`timeout 3`) · cronie needed for crond · transient DNS ENOTFOUND for discord.com
+happens; runit retry self-heals (bot snapshots keep flowing — HTTP to 127.0.0.1
+doesn't need DNS).
+
+**Next.js 16:** `middleware.js` renamed to `proxy.js` + `export function proxy`
+— a proxy.js exporting `middleware` is silently inert and auth gating vanishes
+with NO error · never gate on `process.platform` in server code — the bundler
+folds it to the BUILD machine's OS (win32 shipped; /proc read is the real Linux
+check) · @vercel/blob: `get` needs `{access:'public'}` + `res.stream`; reads
+need `useCache:false` (CDN serves stale queue → commands never execute); writes
+need `addRandomSuffix:false` + `allowOverwrite:true` (otherwise thousands of
+orphan blobs) + `cacheControlMaxAge:60` · never `vercel --prod` from dashboard/
+(root-directory guard).
+
+**discord.js:** AutoMod alert action metadata wants `channel` (resolvable), NOT
+`channelId` — wrong key → `metadata.channel_id[BASE_TYPE_REQUIRED]` · one rule
+per trigger type (preset 4, spam 5) → make creates idempotent (find by name,
+edit in place) · role pings require the role be `mentionable` · member cache is
+online-only → throttle `members.fetch()` for pickers · 50035: required options
+first.
+
+**Misc:** Vercel 402 account-wide disable (2026-10-03) took all 7 projects down
+— phone hosting is now canonical and needs no Vercel; if Vercel returns, delete
+orphan blobs manually in the Storage tab. Mimosa PreToolUse hook false-positives
+on interaction→storage dataflow — count/wrap at load time (local modules only).
+
+## 11. Outstanding items
+
+1. **Rotate secrets** — bot token + dashboard keys were pasted in plaintext
+   chat historically. Rotate via portal → edit phone `.env` → `sv restart bot`.
+   Phone `DASHBOARD_ACCESS_KEY` is user-fixed now (do not rotate without asking).
+2. **MIUI Autostart for Termux:Boot** still NOT enabled by the user (Security
+   app → Autostart) — real reboots won't auto-start Termux until done. Recovery
+   drill: wake screen → open Termux → `sh ~/.termux/boot/start-services.sh`.
+3. Full Mimosa deep scan never completed (library-source limits) — do not claim
+   "security-certified".
+4. Vercel account still disabled; dashboard lives on the phone tunnel.
+
+## 12. Why / How to apply
+
+**Why:** the SSH/adb workflow, guard semantics, and gotchas above recur every
+session; hosting is stable by user decree (phone always online, ample
+resources) — never engineer for disconnects or add keepalives.
+**How to apply:** remote ops = the ssh command in §9; updates = tar+scp +
+`sv restart`; keep the slash-only, embed-only, fail-closed disciplines; never
+introduce prefix commands, servers, or committed secrets; update this file when
+verified facts change.
