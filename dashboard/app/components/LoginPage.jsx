@@ -2,7 +2,8 @@
 
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { motion } from 'framer-motion';
+import { motion } from 'motion/react';
+import { Activity, Zap, Lock } from 'lucide-react';
 import { siteConfig } from '@/lib/site-config';
 
 export default function LoginPage({ demoMode }) {
@@ -26,9 +27,9 @@ export default function LoginPage({ demoMode }) {
         router.refresh();
         return;
       }
-      setError(res.status === 401 ? 'Wrong access key.' : 'Login failed — try again.');
+      setError(res.status === 401 ? 'WRONG ACCESS KEY.' : 'LOGIN FAILED — TRY AGAIN.');
     } catch {
-      setError('Network error — is the site awake?');
+      setError('NETWORK ERROR — IS THE SITE AWAKE?');
     }
     setBusy(false);
   }
@@ -42,17 +43,38 @@ export default function LoginPage({ demoMode }) {
         transition={{ duration: 0.45, ease: [0.22, 1, 0.36, 1] }}
       >
         <div className="login-brand">
-          <div className="login-logo" aria-hidden="true">E</div>
-          <h1>{siteConfig.name}</h1>
-          <p>{siteConfig.tagline}. Live telemetry from the phone host, and every server control in one place.</p>
+          <div className="hazard-strip" aria-hidden="true" />
+          <div className="login-logo-row">
+            <div className="sigil" aria-hidden="true">E</div>
+            <span className="kicker">{siteConfig.name} · control deck</span>
+          </div>
+          <h1>
+            MODERATION<br />
+            WITHOUT<br />
+            COMPROMISE<span className="dot">.</span>
+          </h1>
+          <p className="tagline">
+            Live telemetry from the phone host, and every server control in one
+            place.
+          </p>
           <ul className="login-points">
-            <li><span className="tick" aria-hidden="true">✓</span>Health, usage, cases, and alarms at a glance</li>
-            <li><span className="tick" aria-hidden="true">✓</span>Dispatch config — the phone executes within a minute</li>
-            <li><span className="tick" aria-hidden="true">✓</span>Key-gated, encrypted at rest, no inbound ports</li>
+            <li>
+              <Activity size={14} aria-hidden="true" />
+              Health, usage, cases, and alarms at a glance
+            </li>
+            <li>
+              <Zap size={14} aria-hidden="true" />
+              Dispatch config — the phone executes within a minute
+            </li>
+            <li>
+              <Lock size={14} aria-hidden="true" />
+              Key-gated, encrypted at rest, no inbound ports
+            </li>
           </ul>
         </div>
         <div className="login-form">
-          <h2>Sign in</h2>
+          <span className="kicker red">Restricted access</span>
+          <h2 style={{ marginTop: 10 }}>Sign in</h2>
           <p className="sub">Enter the dashboard access key to continue.</p>
           <form onSubmit={submit}>
             <input
@@ -63,6 +85,7 @@ export default function LoginPage({ demoMode }) {
               onChange={(e) => setKey(e.target.value)}
               autoFocus
               autoComplete="current-password"
+              aria-label="Access key"
             />
             <motion.button
               className="btn"
@@ -75,6 +98,7 @@ export default function LoginPage({ demoMode }) {
           </form>
           <motion.div
             className="error-text"
+            role="alert"
             animate={error ? { x: [0, -7, 7, -4, 4, 0] } : { x: 0 }}
             transition={{ duration: 0.4 }}
           >

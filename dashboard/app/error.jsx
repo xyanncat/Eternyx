@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect } from 'react';
-import { motion } from 'framer-motion';
+import { motion } from 'motion/react';
 import { siteConfig } from '@/lib/site-config';
 
 export default function ErrorPage({ error, reset }) {
@@ -16,20 +16,19 @@ export default function ErrorPage({ error, reset }) {
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.5, ease: [0.22, 1, 0.36, 1] }}
       >
-        <div className="err-code" style={{ fontSize: 'clamp(70px, 16vw, 130px)' }}>500</div>
+        <div className="err-code">500</div>
+        <div className="hazard-strip" aria-hidden="true" />
         <h1>Something broke on our side</h1>
-        <p>{error?.message ?? 'An unexpected error occurred while loading this page.'}</p>
+        <p>An unexpected error occurred while loading this page.</p>
         <motion.button
-          className="home-btn"
-          style={{ border: 0, cursor: 'pointer' }}
+          className="btn"
           onClick={() => reset()}
-          whileHover={{ scale: 1.03 }}
           whileTap={{ scale: 0.97 }}
         >
           Try again
         </motion.button>
-        <div style={{ marginTop: 18 }}>
-          <a href="/" className="dim" style={{ fontSize: 13 }}>or head back to {siteConfig.name}</a>
+        <div className="mono-detail">
+          <a href="/">or head back to {siteConfig.name}</a>
         </div>
       </motion.div>
     </div>

@@ -6,12 +6,15 @@ export default function NotFound() {
     <div className="err-wrap">
       <div>
         <div className="err-code">404</div>
-        <h1>Lost in the void</h1>
+        <div className="hazard-strip" aria-hidden="true" />
+        <h1>Signal lost</h1>
         <p>
-          This page drifted out of {siteConfig.name}&apos;s orbit. The dashboard is still
-          right where you left it, though.
+          This page does not exist. The dashboard is still right where you
+          left it, though.
         </p>
-        <Link className="home-btn" href="/">Back to the dashboard</Link>
+        <Link className="btn" href="/">
+          Back to {siteConfig.name}
+        </Link>
       </div>
     </div>
   );

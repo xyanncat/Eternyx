@@ -1,9 +1,10 @@
 import './globals.css';
-import { Inter, Space_Grotesk } from 'next/font/google';
+import { Syne, Archivo, JetBrains_Mono } from 'next/font/google';
 import { siteConfig } from '@/lib/site-config';
 
-const body = Inter({ subsets: ['latin'], variable: '--font-body', display: 'swap' });
-const display = Space_Grotesk({ subsets: ['latin'], variable: '--font-display', display: 'swap' });
+const display = Syne({ subsets: ['latin'], weight: ['700', '800'], variable: '--font-syne', display: 'swap' });
+const body = Archivo({ subsets: ['latin'], variable: '--font-archivo', display: 'swap' });
+const mono = JetBrains_Mono({ subsets: ['latin'], weight: ['400', '500', '600', '700'], variable: '--font-jbmono', display: 'swap' });
 
 export const metadata = {
   title: siteConfig.name + ' · ' + siteConfig.tagline,
@@ -11,18 +12,9 @@ export const metadata = {
 };
 
 export default function RootLayout({ children }) {
-  const t = siteConfig.theme;
   return (
-    <html lang="en" className={`${body.variable} ${display.variable}`}>
-      <head>
-        <style>{`:root{--bg:${t.background};--surface:${t.surface};--border:${t.border};--text:${t.text};--dim:${t.textDim};--accent:${t.accent};--accent2:${t.accent2};--danger:${t.danger};}`}</style>
-      </head>
-      <body>
-        <div className="bg-orbs" aria-hidden="true">
-          <span /><span /><span />
-        </div>
-        {children}
-      </body>
+    <html lang="en" className={`${display.variable} ${body.variable} ${mono.variable}`}>
+      <body>{children}</body>
     </html>
   );
 }
