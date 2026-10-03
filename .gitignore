@@ -8,3 +8,6 @@ logs/
 # Legacy memory folder (space in name breaks tooling) — superseded by memory/
 Project Memory/
 .playwright-mcp/
+
+.vercel
+.env*
