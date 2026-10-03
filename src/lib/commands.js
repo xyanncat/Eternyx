@@ -99,7 +99,10 @@ async function buildAutomodActions(guild) {
   const cfg = (await import('../storage/db.js')).getConfig(guild.id);
   const actions = [{ type: 1 }]; // AutoModerationActionType.BlockMessage
   if (cfg.logChannelId) {
-    actions.push({ type: 2, metadata: { channelId: cfg.logChannelId } }); // SendAlertMessage
+    // discord.js expects `channel` (resolvable) here — it maps that to the
+    // API's channel_id itself. Passing `channelId` is silently dropped and
+    // Discord rejects the action with metadata.channel_id[BASE_TYPE_REQUIRED].
+    actions.push({ type: 2, metadata: { channel: cfg.logChannelId } }); // SendAlertMessage
   }
   return actions;
 }
@@ -174,8 +177,17 @@ export async function executeCommand(client, { action, params = {}, createdBy = 
         return { ok: true, detail: `${action === 'lock-channel' ? 'locked' : 'unlocked'} <#${ch.id}>` };
       }
       case 'automod-keyword': {
+        // Idempotent by rule name: re-deploying the same name applies the
+        // new word list instead of hitting Discord's per-type rule limit.
+        const ruleName = `eternyx-keyword: ${params.name}`.slice(0, 80);
+        await guild.autoModerationRules.fetch();
+        const existing = guild.autoModerationRules.cache.find((r) => r.name === ruleName);
+        if (existing) {
+          await existing.edit({ triggerMetadata: { keywordFilter: params.words }, reason: auditReason });
+          return { ok: true, detail: `keyword rule "${ruleName}" updated` };
+        }
         const rule = await guild.autoModerationRules.create({
-          name: `eternyx-keyword: ${params.name}`.slice(0, 80),
+          name: ruleName,
           eventType: 1, // MessageSend
           triggerType: 1, // Keyword
           triggerMetadata: { keywordFilter: params.words },
@@ -186,6 +198,11 @@ export async function executeCommand(client, { action, params = {}, createdBy = 
         return { ok: true, detail: `keyword rule "${rule.name}" created` };
       }
       case 'automod-invite': {
+        await guild.autoModerationRules.fetch();
+        const existingInvite = guild.autoModerationRules.cache.find((r) => r.name === 'eternyx-invite-block');
+        if (existingInvite) {
+          return { ok: true, detail: 'invite blocking already active' };
+        }
         const rule = await guild.autoModerationRules.create({
           name: 'eternyx-invite-block',
           eventType: 1,
@@ -198,6 +215,13 @@ export async function executeCommand(client, { action, params = {}, createdBy = 
         return { ok: true, detail: `invite blocking "${rule.name}" active` };
       }
       case 'automod-preset': {
+        // Discord allows only ONE preset-trigger rule per guild. If one exists,
+        // creation would fail — report it as already-active instead.
+        await guild.autoModerationRules.fetch();
+        const existingPreset = guild.autoModerationRules.cache.find((r) => r.triggerType === 4); // KeywordPreset
+        if (existingPreset) {
+          return { ok: true, detail: `preset filters already active ("${existingPreset.name}")` };
+        }
         const rule = await guild.autoModerationRules.create({
           name: 'eternyx-presets',
           eventType: 1,
@@ -210,16 +234,24 @@ export async function executeCommand(client, { action, params = {}, createdBy = 
         return { ok: true, detail: `preset filters "${rule.name}" active` };
       }
       case 'automod-mention-spam': {
+        // Idempotent by rule name: re-applying updates the limit in place.
+        const limit = Number(params.limit);
+        await guild.autoModerationRules.fetch();
+        const existingSpam = guild.autoModerationRules.cache.find((r) => r.name === 'eternyx-mention-spam');
+        if (existingSpam) {
+          await existingSpam.edit({ triggerMetadata: { mentionTotalLimit: limit }, reason: auditReason });
+          return { ok: true, detail: `mention-spam limit → ${limit}` };
+        }
         const rule = await guild.autoModerationRules.create({
           name: 'eternyx-mention-spam',
           eventType: 1,
           triggerType: 5, // Spam
-          triggerMetadata: { mentionTotalLimit: Number(params.limit) },
+          triggerMetadata: { mentionTotalLimit: limit },
           actions: await buildAutomodActions(guild),
           enabled: true,
           reason: auditReason,
         });
-        return { ok: true, detail: `mention-spam limit ${params.limit}` };
+        return { ok: true, detail: `mention-spam limit ${limit}` };
       }
       case 'automod-remove': {
         await guild.autoModerationRules.fetch();

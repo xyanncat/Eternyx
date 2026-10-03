@@ -37,11 +37,19 @@ export const data = new SlashCommandBuilder()
   .setDefaultMemberPermissions(PermissionFlagsBits.ManageGuild)
   .setContexts(InteractionContextType.Guild);
 
+async function findRuleByName(guild, name) {
+  await guild.autoModerationRules.fetch();
+  return guild.autoModerationRules.cache.find((r) => r.name === name) ?? null;
+}
+
 async function createRule(guild, name, triggerType, triggerMetadata) {
   const cfg = getConfig(guild.id);
   const actions = [{ type: AutoModerationActionType.BlockMessage }];
   if (cfg.logChannelId) {
-    actions.push({ type: AutoModerationActionType.SendAlertMessage, metadata: { channelId: cfg.logChannelId } });
+    // `channel` (resolvable) — NOT `channelId`: discord.js resolves it to the
+    // API's channel_id. `channelId` is ignored and Discord answers
+    // metadata.channel_id[BASE_TYPE_REQUIRED].
+    actions.push({ type: AutoModerationActionType.SendAlertMessage, metadata: { channel: cfg.logChannelId } });
   }
   return guild.autoModerationRules.create({
     name: name.slice(0, 80),
@@ -70,11 +78,22 @@ export async function execute(interaction) {
       if (words.length === 0) {
         return interaction.editReply({ embeds: [errorEmbed('No keywords provided.', interaction.user)] });
       }
-      const rule = await createRule(guild, `eternyx-keyword: ${interaction.options.getString('name', true)}`, AutoModerationRuleTriggerType.Keyword, { keywordFilter: words });
+      const ruleName = `eternyx-keyword: ${interaction.options.getString('name', true)}`.slice(0, 80);
+      // Idempotent by name: re-running updates the word list in place.
+      const existing = await findRuleByName(guild, ruleName);
+      if (existing) {
+        await existing.edit({ triggerMetadata: { keywordFilter: words }, reason: 'Eternyx automod update' });
+        return interaction.editReply({ embeds: [buildEmbed({ kind: 'success', title: 'Keyword rule updated', description: `**${ruleName}** — ${words.length} pattern(s) applied, blocked + alert to log channel.`, moderator: interaction.user })] });
+      }
+      const rule = await createRule(guild, ruleName, AutoModerationRuleTriggerType.Keyword, { keywordFilter: words });
       return interaction.editReply({ embeds: [buildEmbed({ kind: 'success', title: 'Keyword rule created', description: `**${rule.name}** — ${words.length} pattern(s), blocked + alert to log channel.`, moderator: interaction.user })] });
     }
 
     if (sub === 'invite') {
+      const existing = await findRuleByName(guild, 'eternyx-invite-block');
+      if (existing) {
+        return interaction.editReply({ embeds: [buildEmbed({ kind: 'info', title: 'Invite blocking already active', description: `**${existing.name}** is already blocking discord.gg links.`, moderator: interaction.user })] });
+      }
       const rule = await createRule(guild, 'eternyx-invite-block', AutoModerationRuleTriggerType.Keyword, {
         keywordFilter: ['*discord.gg/*', '*discord.com/invite/*'],
       });
@@ -82,6 +101,13 @@ export async function execute(interaction) {
     }
 
     if (sub === 'preset') {
+      // One preset-trigger rule per guild (Discord limit) — report an existing
+      // one instead of failing creation.
+      await guild.autoModerationRules.fetch();
+      const existing = guild.autoModerationRules.cache.find((r) => r.triggerType === AutoModerationRuleTriggerType.KeywordPreset);
+      if (existing) {
+        return interaction.editReply({ embeds: [buildEmbed({ kind: 'info', title: 'Preset filters already active', description: `**${existing.name}** is already blocking slurs, severe profanity and explicit text.`, moderator: interaction.user })] });
+      }
       const rule = await createRule(guild, 'eternyx-presets', AutoModerationRuleTriggerType.KeywordPreset, {
         presets: [AutoModerationRuleKeywordPresetType.Profanity, AutoModerationRuleKeywordPresetType.SexualContent, AutoModerationRuleKeywordPresetType.Slurs],
       });
@@ -90,6 +116,12 @@ export async function execute(interaction) {
 
     if (sub === 'mention-spam') {
       const limit = interaction.options.getInteger('limit', true);
+      // Idempotent by name: re-running updates the limit in place.
+      const existing = await findRuleByName(guild, 'eternyx-mention-spam');
+      if (existing) {
+        await existing.edit({ triggerMetadata: { mentionTotalLimit: limit }, reason: 'Eternyx automod update' });
+        return interaction.editReply({ embeds: [buildEmbed({ kind: 'success', title: 'Mention-spam rule updated', description: `**${existing.name}** — messages with more than ${limit} mentions are now blocked.`, moderator: interaction.user })] });
+      }
       const rule = await createRule(guild, 'eternyx-mention-spam', AutoModerationRuleTriggerType.Spam, { mentionTotalLimit: limit });
       return interaction.editReply({ embeds: [buildEmbed({ kind: 'success', title: 'Mention-spam rule created', description: `**${rule.name}** — messages with more than ${limit} mentions are blocked.`, moderator: interaction.user })] });
     }
