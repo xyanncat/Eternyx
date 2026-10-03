@@ -45,7 +45,7 @@ Then create a KV store: Vercel dashboard → your project → Storage → Create
 **KV** → connect. The `KV_REST_API_*` env vars are injected automatically.
 (The site runs without KV too — it shows clearly-badged demo data.)
 
-## Connect the phone
+## Connect the phone (Vercel hosting)
 
 On the phone's `~/eternyx-bot/.env`, add:
 
@@ -56,6 +56,34 @@ DASHBOARD_INGEST_KEY=<key #2 — the ingest key>
 
 then `SVDIR=$PREFIX/var/service sv restart bot`. Within a minute the dashboard
 badge flips from **DEMO DATA** to **LIVE**.
+
+## Host the web on the phone (no Vercel)
+
+The bot and the web share the device: storage switches from Vercel Blob to
+local encrypted files (`STORE_BACKEND=file`), so there are no usage meters.
+Public access comes from a free Cloudflare quick-tunnel (no port forwarding).
+
+```
+# 1. PC: build + ship the bundle (phone USB-connected, Termux sshd up)
+sh deploy/termux/ship-web.sh            # git-bash / WSL / Linux
+
+# 2. Phone: install services
+sh ~/eternyx-bot/deploy/termux/setup-web.sh
+
+# 3. Phone: fill in ~/eternyx-web/.env.web (ingest key MUST match the bot's),
+#    point the bot at it, start everything:
+#      ~/eternyx-bot/.env → DASHBOARD_URL=http://127.0.0.1:3000
+#      SVDIR=$PREFIX/var/service sv restart bot
+#      SVDIR=$PREFIX/var/service sv up web tunnel
+
+# 4. Phone: read the public URL
+grep -o 'https://[^ ]*trycloudflare.com' ~/eternyx-web/tunnel.log | tail -1
+```
+
+Notes: the quick-tunnel URL changes on every tunnel restart; the bot always
+talks to `127.0.0.1:3000` regardless. Storage lives in `~/eternyx-web/data/`
+(encrypted with the ingest key, same as Blob). To update: re-run `ship-web.sh`
+then `sv restart web`.
 
 ## Security model
 

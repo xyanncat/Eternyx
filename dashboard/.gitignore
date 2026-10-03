@@ -6,3 +6,6 @@ node_modules/
 
 .vercel
 .env*
+# Example templates are safe to commit (no secrets in them).
+!.env.example
+!.env.web.example
