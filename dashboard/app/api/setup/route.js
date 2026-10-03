@@ -16,6 +16,7 @@ const KNOWN_ACTIONS = new Set([
   'post-panel',
   'lockdown-on',
   'lockdown-off',
+  'test-alert',
   'announce',
   'set-slowmode',
   'lock-channel',

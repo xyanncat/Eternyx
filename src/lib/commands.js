@@ -18,6 +18,7 @@ export const KNOWN_ACTIONS = [
   'post-panel',
   'lockdown-on',
   'lockdown-off',
+  'test-alert',
   'announce',
   'set-slowmode',
   'lock-channel',
@@ -58,6 +59,7 @@ export function validateCommand({ action, params = {} }) {
       return { ok: true };
     case 'lockdown-on':
     case 'lockdown-off':
+    case 'test-alert':
       return { ok: true };
     case 'announce':
       if (!isSnowflake(p.channelId ?? '')) return { ok: false, reason: 'missing/invalid channelId' };
@@ -179,6 +181,23 @@ export async function executeCommand(client, { action, params = {}, createdBy = 
         const { deactivateLockdown } = await import('./lockdown.js');
         const result = await deactivateLockdown(guild, createdBy, auditReason);
         return { ok: result.ok, detail: result.detail };
+      }
+      case 'test-alert': {
+        // Proof that alerts reach the log channel AND the configured DM
+        // recipients — the fastest way to verify alert delivery after any
+        // config change (e.g. OWNER_IDS pinning).
+        const { alertRecipients, alertOwners } = await import('./alerts.js');
+        const { sendAuditLog } = await import('./audit.js');
+        const recipients = alertRecipients(guild);
+        const embed = buildEmbed({
+          kind: 'info',
+          title: '🧪 Test alert',
+          description: `If you can read this, alerts work. DM recipients: ${recipients.map((id) => `<@${id}>`).join(', ') || 'none configured'}.`,
+          moderator: client.user,
+        });
+        await sendAuditLog(guild, embed);
+        const delivered = await alertOwners(guild, embed);
+        return { ok: true, detail: `test alert sent — log channel + ${delivered}/${recipients.length} DM(s) delivered` };
       }
       case 'announce': {
         const ch = channelOf(guild, params.channelId);
