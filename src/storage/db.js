@@ -25,7 +25,11 @@ const SCHEMA = [
     mod_role_ids TEXT NOT NULL DEFAULT '[]',
     owner_ids TEXT NOT NULL DEFAULT '[]',
     raid_threshold INTEGER NOT NULL DEFAULT 10,
-    nuke_auto_action INTEGER NOT NULL DEFAULT 0
+    nuke_auto_action INTEGER NOT NULL DEFAULT 0,
+    control_panel_channel_id TEXT,
+    control_panel_message_id TEXT,
+    lockdown_active INTEGER NOT NULL DEFAULT 0,
+    lockdown_channels TEXT NOT NULL DEFAULT '[]'
   )`,
   `CREATE TABLE IF NOT EXISTS events (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -44,7 +48,23 @@ export function initDb(dbPath) {
   db = new DatabaseSync(dbPath);
   db.prepare('PRAGMA journal_mode = WAL').get();
   for (const statement of SCHEMA) db.prepare(statement).run();
+  migrate();
   return db;
+}
+
+// Additive migrations for databases created before a column existed.
+// Column names/types are compile-time constants — never built from input.
+function migrate() {
+  const cols = new Set(db.prepare('PRAGMA table_info(config)').all().map((r) => r.name));
+  const ADDITIONS = [
+    ['control_panel_channel_id', 'TEXT'],
+    ['control_panel_message_id', 'TEXT'],
+    ['lockdown_active', 'INTEGER NOT NULL DEFAULT 0'],
+    ['lockdown_channels', "TEXT NOT NULL DEFAULT '[]'"],
+  ];
+  for (const [name, type] of ADDITIONS) {
+    if (!cols.has(name)) db.prepare(`ALTER TABLE config ADD COLUMN ${name} ${type}`).run();
+  }
 }
 
 export function closeDb() {
@@ -110,6 +130,10 @@ const DEFAULTS = {
   ownerIds: [],
   raidThreshold: 10,
   nukeAutoAction: 0,
+  controlPanelChannelId: null,
+  controlPanelMessageId: null,
+  lockdownActive: 0,
+  lockdownChannels: [],
 };
 
 function parseJsonArray(text) {
@@ -130,21 +154,30 @@ export function getConfig(guildId) {
     ownerIds: parseJsonArray(row.owner_ids),
     raidThreshold: row.raid_threshold,
     nukeAutoAction: row.nuke_auto_action,
+    controlPanelChannelId: row.control_panel_channel_id ?? null,
+    controlPanelMessageId: row.control_panel_message_id ?? null,
+    lockdownActive: row.lockdown_active ?? 0,
+    lockdownChannels: parseJsonArray(row.lockdown_channels ?? '[]'),
   };
 }
 
 export function setConfig(guildId, patch) {
   const merged = { ...getConfig(guildId), ...patch };
   db.prepare(
-    `INSERT OR REPLACE INTO config (guild_id, log_channel_id, mod_role_ids, owner_ids, raid_threshold, nuke_auto_action)
-     VALUES (?, ?, ?, ?, ?, ?)`
+    `INSERT OR REPLACE INTO config (guild_id, log_channel_id, mod_role_ids, owner_ids, raid_threshold, nuke_auto_action,
+       control_panel_channel_id, control_panel_message_id, lockdown_active, lockdown_channels)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
   ).run(
     guildId,
     merged.logChannelId,
     JSON.stringify(merged.modRoleIds),
     JSON.stringify(merged.ownerIds),
     merged.raidThreshold,
-    merged.nukeAutoAction
+    merged.nukeAutoAction,
+    merged.controlPanelChannelId,
+    merged.controlPanelMessageId,
+    merged.lockdownActive,
+    JSON.stringify(merged.lockdownChannels)
   );
   return merged;
 }

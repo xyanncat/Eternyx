@@ -125,6 +125,8 @@ async function pushSnapshot(client, acks = []) {
           modRoleIds: cfg.modRoleIds ?? [],
           raidThreshold: cfg.raidThreshold ?? 10,
           nukeAutoAction: cfg.nukeAutoAction ?? 0,
+          controlPanelChannelId: cfg.controlPanelChannelId ?? null,
+          lockdownActive: cfg.lockdownActive ?? 0,
         }
       : null,
     usage: topCommands(20),

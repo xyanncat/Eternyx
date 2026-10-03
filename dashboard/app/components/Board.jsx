@@ -170,6 +170,7 @@ export default function Board({ initial }) {
   const logs = snapshot.logs || [];
   const maxCount = Math.max(1, ...usage.map((u) => u.count));
   const isDemo = Boolean(snapshot.demo);
+  const lockdownActive = Boolean(snapshot?.config?.lockdownActive);
   const ramMb = bot.rssMb || 0;
   const ramPct = Math.min(100, Math.round((ramMb / 256) * 100));
   const section = SECTIONS.find((s) => s.id === activeTab) ?? SECTIONS[0];
@@ -679,6 +680,38 @@ export default function Board({ initial }) {
                         Apply
                       </button>
                     </div>
+                  </div>
+                </div>
+
+                <div className="card pad ticked">
+                  <div className="sec-head">
+                    <span className={`kicker ${lockdownActive ? 'red' : 'amber'}`}>{lockdownActive ? 'Emergency' : 'Controls'}</span>
+                    <h2>Server lockdown</h2>
+                  </div>
+                  <p className="dim" style={{ fontSize: 13, marginBottom: 14 }}>
+                    Locks every public channel at once. Unlock restores each channel&apos;s previous
+                    permissions exactly — the state survives bot restarts.
+                  </p>
+                  <div style={{ display: 'flex', gap: 10, alignItems: 'center', marginBottom: 14 }}>
+                    <span className={`badge ${lockdownActive ? 'danger' : ''}`}>
+                      {lockdownActive ? 'Lockdown ACTIVE' : 'Lockdown off'}
+                    </span>
+                  </div>
+                  <div style={{ display: 'flex', gap: 10 }}>
+                    <button
+                      className="btn small danger"
+                      disabled={loading || lockdownActive}
+                      onClick={() => dispatchAction('lockdown-on', {})}
+                    >
+                      Lockdown ON
+                    </button>
+                    <button
+                      className="btn small ghost"
+                      disabled={loading || !lockdownActive}
+                      onClick={() => dispatchAction('lockdown-off', {})}
+                    >
+                      Lockdown OFF
+                    </button>
                   </div>
                 </div>
               </motion.div>

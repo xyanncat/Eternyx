@@ -36,13 +36,44 @@ test('listUserCases scopes by guild and user', () => {
 });
 
 test('config merges patches over defaults', () => {
-  assert.deepEqual(getConfig('g'), { logChannelId: null, modRoleIds: [], ownerIds: [], raidThreshold: 10, nukeAutoAction: 0 });
+  assert.deepEqual(getConfig('g'), {
+    logChannelId: null,
+    modRoleIds: [],
+    ownerIds: [],
+    raidThreshold: 10,
+    nukeAutoAction: 0,
+    controlPanelChannelId: null,
+    controlPanelMessageId: null,
+    lockdownActive: 0,
+    lockdownChannels: [],
+  });
   setConfig('g', { logChannelId: 'c1' });
   setConfig('g', { modRoleIds: ['r1'] });
   const cfg = getConfig('g');
   assert.equal(cfg.logChannelId, 'c1');
   assert.deepEqual(cfg.modRoleIds, ['r1']);
   assert.equal(cfg.raidThreshold, 10);
+});
+
+test('lockdown state persists with exact restore data', () => {
+  setConfig('g', {
+    lockdownActive: 1,
+    lockdownChannels: [
+      { id: 'ch1', prev: 'allow' },
+      { id: 'ch2', prev: 'neutral' },
+    ],
+  });
+  // Simulated restart: same rows must come back intact.
+  const cfg = getConfig('g');
+  assert.equal(cfg.lockdownActive, 1);
+  assert.deepEqual(cfg.lockdownChannels, [
+    { id: 'ch1', prev: 'allow' },
+    { id: 'ch2', prev: 'neutral' },
+  ]);
+  setConfig('g', { lockdownActive: 0, lockdownChannels: [] });
+  const lifted = getConfig('g');
+  assert.equal(lifted.lockdownActive, 0);
+  assert.deepEqual(lifted.lockdownChannels, []);
 });
 
 test('config survives malformed stored JSON', () => {

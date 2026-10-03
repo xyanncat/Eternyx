@@ -47,6 +47,18 @@ export const data = new SlashCommandBuilder()
           .setDescription('Auto-timeout a mass-banning admin (default: off, alert only)')
           .addBooleanOption((o) => o.setName('enabled').setDescription('on/off').setRequired(true))
       )
+      .addSubcommand((s) =>
+        s
+          .setName('control-channel')
+          .setDescription('Channel for the /panel security control panel')
+          .addChannelOption((o) =>
+            o
+              .setName('channel')
+              .setDescription('Control panel channel')
+              .setRequired(true)
+              .addChannelTypes(ChannelType.GuildText, ChannelType.GuildAnnouncement)
+          )
+      )
   )
   .addSubcommandGroup((g) =>
     g
@@ -141,9 +153,27 @@ export async function execute(interaction) {
     });
   }
 
+  if (group === 'set' && sub === 'control-channel') {
+    const channel = interaction.options.getChannel('channel', true);
+    const perms = channel.permissionsFor(guild.members.me);
+    if (!perms?.has([PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages, PermissionFlagsBits.EmbedLinks])) {
+      return interaction.reply({
+        embeds: [errorEmbed(`I need View Channel, Send Messages and Embed Links in <#${channel.id}> first.`, interaction.user)],
+        flags: EPHEMERAL,
+      });
+    }
+    setConfig(guild.id, { controlPanelChannelId: channel.id });
+    return interaction.reply({
+      embeds: [buildEmbed({ kind: 'success', title: 'Control channel set', description: `Post the panel with \`/panel\` into <#${channel.id}>.`, moderator: interaction.user })],
+      flags: EPHEMERAL,
+    });
+  }
+
   // show
   const lines = [
     `**Log channel:** ${cfg.logChannelId ? `<#${cfg.logChannelId}>` : 'not set'}`,
+    `**Control channel:** ${cfg.controlPanelChannelId ? `<#${cfg.controlPanelChannelId}>` : 'not set'}`,
+    `**Lockdown:** ${cfg.lockdownActive ? '🔒 ACTIVE (persisted across restarts)' : 'off'}`,
     `**Moderator roles:** ${cfg.modRoleIds.length ? cfg.modRoleIds.map((id) => `<@&${id}>`).join(', ') : 'none'}`,
     `**Raid threshold:** ${cfg.raidThreshold} joins/min`,
     `**Nuke auto-action:** ${cfg.nukeAutoAction ? 'on' : 'off (alert only)'}`,

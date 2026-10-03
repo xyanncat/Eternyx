@@ -14,6 +14,10 @@ export const KNOWN_ACTIONS = [
   'add-mod-role',
   'set-raid-threshold',
   'set-nuke-auto-action',
+  'set-control-channel',
+  'post-panel',
+  'lockdown-on',
+  'lockdown-off',
   'announce',
   'set-slowmode',
   'lock-channel',
@@ -40,7 +44,9 @@ export function validateCommand({ action, params = {} }) {
     case 'set-log-channel':
     case 'set-mod-role':
     case 'add-mod-role':
-      if (!isSnowflake(p.id ?? '')) return { ok: false, reason: 'missing/invalid id' };
+    case 'set-control-channel':
+    case 'post-panel':
+      if (!isSnowflake(p.id ?? p.channelId ?? '')) return { ok: false, reason: 'missing/invalid id' };
       return { ok: true };
     case 'set-raid-threshold': {
       const n = Number(p.joins);
@@ -49,6 +55,9 @@ export function validateCommand({ action, params = {} }) {
     }
     case 'set-nuke-auto-action':
       if (typeof p.enabled !== 'boolean') return { ok: false, reason: 'enabled must be boolean' };
+      return { ok: true };
+    case 'lockdown-on':
+    case 'lockdown-off':
       return { ok: true };
     case 'announce':
       if (!isSnowflake(p.channelId ?? '')) return { ok: false, reason: 'missing/invalid channelId' };
@@ -140,6 +149,29 @@ export async function executeCommand(client, { action, params = {}, createdBy = 
       case 'set-nuke-auto-action':
         setConfig(guild.id, { nukeAutoAction: params.enabled ? 1 : 0 });
         return { ok: true, detail: `nuke auto-action ${params.enabled ? 'on' : 'off'}` };
+      case 'set-control-channel': {
+        const ch = channelOf(guild, params.id ?? params.channelId);
+        if (!ch?.isTextBased()) return { ok: false, detail: 'channel not found or not text-based' };
+        setConfig(guild.id, { controlPanelChannelId: ch.id });
+        return { ok: true, detail: `control channel → <#${ch.id}> (post it with post-panel)` };
+      }
+      case 'post-panel': {
+        const ch = channelOf(guild, params.channelId ?? params.id);
+        if (!ch?.isTextBased()) return { ok: false, detail: 'channel not found or not text-based' };
+        const { postPanel } = await import('./panel.js');
+        const message = await postPanel(guild, ch);
+        return { ok: true, detail: `control panel posted in <#${ch.id}> (message ${message.id})` };
+      }
+      case 'lockdown-on': {
+        const { activateLockdown } = await import('./lockdown.js');
+        const result = await activateLockdown(guild, createdBy, auditReason);
+        return { ok: result.ok, detail: result.detail };
+      }
+      case 'lockdown-off': {
+        const { deactivateLockdown } = await import('./lockdown.js');
+        const result = await deactivateLockdown(guild, createdBy, auditReason);
+        return { ok: result.ok, detail: result.detail };
+      }
       case 'announce': {
         const ch = channelOf(guild, params.channelId);
         if (!ch?.isTextBased()) return { ok: false, detail: 'channel not found or not text-based' };

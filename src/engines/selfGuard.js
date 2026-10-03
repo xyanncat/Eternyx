@@ -21,6 +21,19 @@ const REQUIRED = [
   PermissionFlagsBits.ViewAuditLog,
 ];
 
+// Permissions that are catastrophic when granted to @everyone.
+const DANGEROUS_FOR_EVERYONE = [
+  PermissionFlagsBits.Administrator,
+  PermissionFlagsBits.ManageGuild,
+  PermissionFlagsBits.ManageRoles,
+  PermissionFlagsBits.ManageChannels,
+  PermissionFlagsBits.ManageWebhooks,
+  PermissionFlagsBits.BanMembers,
+  PermissionFlagsBits.KickMembers,
+  PermissionFlagsBits.MentionEveryone,
+  PermissionFlagsBits.ModerateMembers,
+];
+
 const DEDUPE_MS = 5 * 60_000;
 const lastAlert = new Map(); // kind -> ts
 
@@ -39,6 +52,27 @@ async function alertOnce(guild, kind, embed) {
 
 export async function onRoleUpdate(oldRole, newRole) {
   const guild = newRole.guild;
+
+  // @everyone gaining dangerous permissions is the single worst change a
+  // compromised admin can make — watch it independently of the bot's role.
+  if (newRole.id === guild.id) {
+    const gained = DANGEROUS_FOR_EVERYONE.filter(
+      (p) => newRole.permissions.has(p) && !oldRole.permissions.has(p)
+    );
+    if (gained.length > 0) {
+      await alertOnce(
+        guild,
+        'everyone_perm_escalation',
+        buildEmbed({
+          kind: 'error',
+          title: '🚨 @everyone gained dangerous permissions',
+          description: `${gained.map(permName).map((n) => `- ${n}`).join('\n')}\n\nEvery member now has these. If this wasn't you, revert immediately and check the audit log.`,
+        })
+      );
+    }
+    return;
+  }
+
   const me = guild.members.me;
   if (!me.roles.cache.has(newRole.id)) return;
 

@@ -1,8 +1,10 @@
-// Owner-only raid response (plan §5): lock/unlock every public text channel at once.
+// Owner-only raid response (plan §5): lock/unlock every public text channel
+// at once. State is persisted (lib/lockdown) so unlock restores each
+// channel's previous @everyone SendMessages value instead of blanket-opening.
 import { PermissionFlagsBits, SlashCommandBuilder, InteractionContextType } from 'discord.js';
 import { buildEmbed } from '../../lib/embeds.js';
 import { sendAuditLog } from '../../lib/audit.js';
-import { recordEvent } from '../../storage/db.js';
+import { activateLockdown, deactivateLockdown } from '../../lib/lockdown.js';
 
 export const meta = { ownerOnly: true, cooldown: 30 };
 
@@ -28,27 +30,24 @@ export async function execute(interaction) {
 
   await interaction.deferReply();
 
-  const channels = [...guild.channels.cache.values()].filter(
-    (ch) => ch.isTextBased() && !ch.isThread() && !ch.isVoiceBased()
-  );
-  const results = await Promise.allSettled(
-    channels.map((ch) =>
-      ch.permissionOverwrites.edit(
-        guild.roles.everyone,
-        { SendMessages: on ? false : null },
-        { reason: `lockdown ${mode} — ${reason} — by ${interaction.user.username}` }
-      )
-    )
-  );
-  const ok = results.filter((r) => r.status === 'fulfilled').length;
-  const failed = results.length - ok;
+  const result = on
+    ? await activateLockdown(guild, interaction.user.username, reason)
+    : await deactivateLockdown(guild, interaction.user.username, reason);
 
-  recordEvent('lockdown', JSON.stringify({ guild: guild.id, mode, ok, failed, by: interaction.user.id }));
+  if (!result.ok) {
+    const embed = buildEmbed({
+      kind: 'warn',
+      title: 'No change',
+      description: result.detail,
+      moderator: interaction.user,
+    });
+    return interaction.editReply({ embeds: [embed] });
+  }
 
   const embed = buildEmbed({
     kind: on ? 'warn' : 'success',
     title: on ? '🔒 Lockdown active' : '🔓 Lockdown lifted',
-    description: `**${ok}** channel(s) ${on ? 'locked' : 'unlocked'}${failed ? `, **${failed}** failed` : ''}.\n**Reason:** ${reason}`,
+    description: `${result.detail}.\n**Reason:** ${reason}`,
     moderator: interaction.user,
   });
   await sendAuditLog(guild, embed);
