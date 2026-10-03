@@ -29,7 +29,9 @@ const SCHEMA = [
     control_panel_channel_id TEXT,
     control_panel_message_id TEXT,
     lockdown_active INTEGER NOT NULL DEFAULT 0,
-    lockdown_channels TEXT NOT NULL DEFAULT '[]'
+    lockdown_channels TEXT NOT NULL DEFAULT '[]',
+    auto_role_user_id TEXT,
+    auto_role_bot_id TEXT
   )`,
   `CREATE TABLE IF NOT EXISTS events (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -61,6 +63,8 @@ function migrate() {
     ['control_panel_message_id', 'TEXT'],
     ['lockdown_active', 'INTEGER NOT NULL DEFAULT 0'],
     ['lockdown_channels', "TEXT NOT NULL DEFAULT '[]'"],
+    ['auto_role_user_id', 'TEXT'],
+    ['auto_role_bot_id', 'TEXT'],
   ];
   for (const [name, type] of ADDITIONS) {
     if (!cols.has(name)) db.prepare(`ALTER TABLE config ADD COLUMN ${name} ${type}`).run();
@@ -134,6 +138,8 @@ const DEFAULTS = {
   controlPanelMessageId: null,
   lockdownActive: 0,
   lockdownChannels: [],
+  autoRoleUserId: null,
+  autoRoleBotId: null,
 };
 
 function parseJsonArray(text) {
@@ -158,6 +164,8 @@ export function getConfig(guildId) {
     controlPanelMessageId: row.control_panel_message_id ?? null,
     lockdownActive: row.lockdown_active ?? 0,
     lockdownChannels: parseJsonArray(row.lockdown_channels ?? '[]'),
+    autoRoleUserId: row.auto_role_user_id ?? null,
+    autoRoleBotId: row.auto_role_bot_id ?? null,
   };
 }
 
@@ -165,8 +173,9 @@ export function setConfig(guildId, patch) {
   const merged = { ...getConfig(guildId), ...patch };
   db.prepare(
     `INSERT OR REPLACE INTO config (guild_id, log_channel_id, mod_role_ids, owner_ids, raid_threshold, nuke_auto_action,
-       control_panel_channel_id, control_panel_message_id, lockdown_active, lockdown_channels)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+       control_panel_channel_id, control_panel_message_id, lockdown_active, lockdown_channels,
+       auto_role_user_id, auto_role_bot_id)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
   ).run(
     guildId,
     merged.logChannelId,
@@ -177,7 +186,9 @@ export function setConfig(guildId, patch) {
     merged.controlPanelChannelId,
     merged.controlPanelMessageId,
     merged.lockdownActive,
-    JSON.stringify(merged.lockdownChannels)
+    JSON.stringify(merged.lockdownChannels),
+    merged.autoRoleUserId,
+    merged.autoRoleBotId
   );
   return merged;
 }

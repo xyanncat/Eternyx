@@ -73,6 +73,8 @@ export default function Board({ initial }) {
   const [selectedLogChannel, setSelectedLogChannel] = useState('');
   const [selectedModRole, setSelectedModRole] = useState('');
   const [modRoleMode, setModRoleMode] = useState('set'); // set or add
+  const [autoRoleUser, setAutoRoleUser] = useState('');
+  const [autoRoleBot, setAutoRoleBot] = useState('');
   const [raidThreshold, setRaidThreshold] = useState(10);
   const [nukeAction, setNukeAction] = useState(false);
 
@@ -123,6 +125,8 @@ export default function Board({ initial }) {
   useEffect(() => {
     if (snapshot?.config) {
       if (snapshot.config.logChannelId) setSelectedLogChannel(snapshot.config.logChannelId);
+      if (snapshot.config.autoRoleUserId) setAutoRoleUser(snapshot.config.autoRoleUserId);
+      if (snapshot.config.autoRoleBotId) setAutoRoleBot(snapshot.config.autoRoleBotId);
       if (snapshot.config.raidThreshold) setRaidThreshold(snapshot.config.raidThreshold);
       if (typeof snapshot.config.nukeAutoAction === 'number') {
         setNukeAction(snapshot.config.nukeAutoAction === 1);
@@ -482,6 +486,67 @@ export default function Board({ initial }) {
                   </button>
                   <div className="form-note">
                     Active mod roles: {snapshot?.config?.modRoleIds?.length || 0}
+                  </div>
+                </div>
+
+                <div className="card pad ticked">
+                  <div className="sec-head">
+                    <span className="kicker">On join</span>
+                    <h2>Auto roles</h2>
+                  </div>
+                  <p className="lede">
+                    Granted automatically when someone joins. Requires the bot to have Manage Roles
+                    with its role above both picks.
+                  </p>
+                  <div className="field">
+                    <label>Role for members</label>
+                    <select
+                      className="input"
+                      value={autoRoleUser}
+                      onChange={(e) => setAutoRoleUser(e.target.value)}
+                    >
+                      <option value="">Off</option>
+                      {roles.map((r) => (
+                        <option key={r.id} value={r.id}>
+                          @{r.name}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                  <div className="field">
+                    <label>Role for bots</label>
+                    <select
+                      className="input"
+                      value={autoRoleBot}
+                      onChange={(e) => setAutoRoleBot(e.target.value)}
+                    >
+                      <option value="">Off</option>
+                      {roles.map((r) => (
+                        <option key={r.id} value={r.id}>
+                          @{r.name}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                  <div style={{ display: 'flex', gap: 10 }}>
+                    <button
+                      className="btn small"
+                      disabled={loading || !autoRoleUser}
+                      onClick={() => dispatchAction('set-auto-role', { kind: 'user', id: autoRoleUser })}
+                    >
+                      Save member role
+                    </button>
+                    <button
+                      className="btn small"
+                      disabled={loading || !autoRoleBot}
+                      onClick={() => dispatchAction('set-auto-role', { kind: 'bot', id: autoRoleBot })}
+                    >
+                      Save bot role
+                    </button>
+                  </div>
+                  <div className="form-note">
+                    Current: members {snapshot?.config?.autoRoleUserId ? '✓ set' : 'off'} · bots{' '}
+                    {snapshot?.config?.autoRoleBotId ? '✓ set' : 'off'}
                   </div>
                 </div>
               </motion.div>

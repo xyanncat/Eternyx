@@ -141,6 +141,8 @@ async function pushSnapshot(client, acks = []) {
           nukeAutoAction: cfg.nukeAutoAction ?? 0,
           controlPanelChannelId: cfg.controlPanelChannelId ?? null,
           lockdownActive: cfg.lockdownActive ?? 0,
+          autoRoleUserId: cfg.autoRoleUserId ?? null,
+          autoRoleBotId: cfg.autoRoleBotId ?? null,
         }
       : null,
     usage: topCommands(20),

@@ -46,6 +46,8 @@ test('config merges patches over defaults', () => {
     controlPanelMessageId: null,
     lockdownActive: 0,
     lockdownChannels: [],
+    autoRoleUserId: null,
+    autoRoleBotId: null,
   });
   setConfig('g', { logChannelId: 'c1' });
   setConfig('g', { modRoleIds: ['r1'] });

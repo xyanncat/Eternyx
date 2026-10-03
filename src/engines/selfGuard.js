@@ -19,6 +19,7 @@ const REQUIRED = [
   PermissionFlagsBits.ManageChannels,
   PermissionFlagsBits.ManageGuild,
   PermissionFlagsBits.ViewAuditLog,
+  PermissionFlagsBits.ManageRoles, // needed for auto-role on join
 ];
 
 // Permissions that are catastrophic when granted to @everyone.

@@ -19,6 +19,7 @@ export const KNOWN_ACTIONS = [
   'lockdown-on',
   'lockdown-off',
   'test-alert',
+  'set-auto-role',
   'announce',
   'set-slowmode',
   'lock-channel',
@@ -60,6 +61,10 @@ export function validateCommand({ action, params = {} }) {
     case 'lockdown-on':
     case 'lockdown-off':
     case 'test-alert':
+      return { ok: true };
+    case 'set-auto-role':
+      if (p.kind !== 'user' && p.kind !== 'bot') return { ok: false, reason: "kind must be 'user' or 'bot'" };
+      if (!isSnowflake(p.id ?? '')) return { ok: false, reason: 'missing/invalid id' };
       return { ok: true };
     case 'announce':
       if (!isSnowflake(p.channelId ?? '')) return { ok: false, reason: 'missing/invalid channelId' };
@@ -183,9 +188,6 @@ export async function executeCommand(client, { action, params = {}, createdBy = 
         return { ok: result.ok, detail: result.detail };
       }
       case 'test-alert': {
-        // Proof that alerts reach the log channel AND the configured DM
-        // recipients — the fastest way to verify alert delivery after any
-        // config change (e.g. OWNER_IDS pinning).
         const { alertRecipients, alertOwners } = await import('./alerts.js');
         const { sendAuditLog } = await import('./audit.js');
         const recipients = alertRecipients(guild);
@@ -198,6 +200,17 @@ export async function executeCommand(client, { action, params = {}, createdBy = 
         await sendAuditLog(guild, embed);
         const delivered = await alertOwners(guild, embed);
         return { ok: true, detail: `test alert sent — log channel + ${delivered}/${recipients.length} DM(s) delivered` };
+      }
+      case 'set-auto-role': {
+        const role = guild.roles.cache.get(params.id);
+        if (!role) return { ok: false, detail: 'role not found' };
+        if (role.id === guild.id || role.managed) return { ok: false, detail: 'that role cannot be auto-assigned' };
+        if (params.kind === 'user') {
+          setConfig(guild.id, { autoRoleUserId: role.id });
+          return { ok: true, detail: `auto-role for members → @${role.name}` };
+        }
+        setConfig(guild.id, { autoRoleBotId: role.id });
+        return { ok: true, detail: `auto-role for bots → @${role.name}` };
       }
       case 'announce': {
         const ch = channelOf(guild, params.channelId);

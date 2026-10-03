@@ -59,6 +59,19 @@ export const data = new SlashCommandBuilder()
               .addChannelTypes(ChannelType.GuildText, ChannelType.GuildAnnouncement)
           )
       )
+      .addSubcommand((s) =>
+        s
+          .setName('auto-role')
+          .setDescription('Role granted automatically on join (humans or bots)')
+          .addStringOption((o) =>
+            o
+              .setName('kind')
+              .setDescription('Who gets it')
+              .setRequired(true)
+              .addChoices({ name: 'user (humans)', value: 'user' }, { name: 'bot (automated accounts)', value: 'bot' })
+          )
+          .addRoleOption((o) => o.setName('role').setDescription('Role to grant').setRequired(true))
+      )
   )
   .addSubcommandGroup((g) =>
     g
@@ -169,10 +182,37 @@ export async function execute(interaction) {
     });
   }
 
+  if (group === 'set' && sub === 'auto-role') {
+    const kind = interaction.options.getString('kind', true);
+    const role = interaction.options.getRole('role', true);
+    if (role.id === guild.id || role.managed) {
+      return interaction.reply({
+        embeds: [errorEmbed('That role cannot be auto-assigned (@everyone / integration-managed roles are not allowed).', interaction.user)],
+        flags: EPHEMERAL,
+      });
+    }
+    const patch = kind === 'user' ? { autoRoleUserId: role.id } : { autoRoleBotId: role.id };
+    setConfig(guild.id, patch);
+    return interaction.reply({
+      embeds: [buildEmbed({
+        kind: 'success',
+        title: 'Auto-role set',
+        description: kind === 'user'
+          ? `New members get <@&${role.id}> automatically.`
+          : `New bots get <@&${role.id}> automatically.`,
+        moderator: interaction.user,
+        fields: [{ name: 'Note', value: 'My role needs **Manage Roles** and must sit above the auto role.' }],
+      })],
+      flags: EPHEMERAL,
+    });
+  }
+
   // show
   const lines = [
     `**Log channel:** ${cfg.logChannelId ? `<#${cfg.logChannelId}>` : 'not set'}`,
     `**Control channel:** ${cfg.controlPanelChannelId ? `<#${cfg.controlPanelChannelId}>` : 'not set'}`,
+    `**Auto-role (members):** ${cfg.autoRoleUserId ? `<@&${cfg.autoRoleUserId}>` : 'off'}`,
+    `**Auto-role (bots):** ${cfg.autoRoleBotId ? `<@&${cfg.autoRoleBotId}>` : 'off'}`,
     `**Lockdown:** ${cfg.lockdownActive ? '🔒 ACTIVE (persisted across restarts)' : 'off'}`,
     `**Moderator roles:** ${cfg.modRoleIds.length ? cfg.modRoleIds.map((id) => `<@&${id}>`).join(', ') : 'none'}`,
     `**Raid threshold:** ${cfg.raidThreshold} joins/min`,

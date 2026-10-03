@@ -17,6 +17,7 @@ const KNOWN_ACTIONS = new Set([
   'lockdown-on',
   'lockdown-off',
   'test-alert',
+  'set-auto-role',
   'announce',
   'set-slowmode',
   'lock-channel',
