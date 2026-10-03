@@ -18,11 +18,22 @@ initDb(path.join(ROOT, 'data', 'eternyx.db'));
 startUsageFlush();
 
 const client = new Client({
-  intents: [GatewayIntentBits.Guilds, GatewayIntentBits.GuildMembers, GatewayIntentBits.GuildModeration],
+  // MessageContent + GuildMessages: required for message edit/delete logging
+  // (GuildMessages gates the events themselves, MessageContent the content;
+  // the app flag is enabled). Content is never processed — only mirrored to
+  // the log channel on edit/delete events.
+  intents: [
+    GatewayIntentBits.Guilds,
+    GatewayIntentBits.GuildMembers,
+    GatewayIntentBits.GuildModeration,
+    GatewayIntentBits.GuildMessages,
+    GatewayIntentBits.MessageContent,
+  ],
   makeCache: Options.cacheWithLimits({
     ...Options.DefaultMakeCacheSettings,
-    // We never read message text (native AutoMod handles content) — cache nothing.
-    MessageManager: 0,
+    // A small message cache backs the before/after content for edit logs and
+    // the content for delete logs. Capped per channel; sweepers evict below.
+    MessageManager: 100,
     PresenceManager: 0,
     ThreadManager: 0,
     VoiceStateManager: 0,

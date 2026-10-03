@@ -49,8 +49,11 @@ PC (controls, git, builds) --adb/ssh--> Xiaomi phone (Termux)
 
 - **Bot runtime:** Node ≥ 22.5, discord.js 14.27.0 (pinned), `node:sqlite`
   (stdlib — zero native deps), dotenv. Intents: Guilds + GuildMembers +
-  GuildModeration. **MessageContent OFF** (native AutoMod handles content).
-  Caches slimmed (message/presence/thread/voice 0; members capped 500) + hourly
+  GuildModeration + **GuildMessages + MessageContent** (the last two exist for
+  message edit/delete audit logging; the app flag is enabled). Content is never
+  processed — original stance was content OFF, changed by user request for
+  full message logging. Caches slimmed (presence/thread/voice 0; **messages
+  100/channel** — backs before/after content; members capped 500) + hourly
   sweepers for low RAM.
 - **Storage:** `data/eternyx.db` (node:sqlite). Tables: `cases` (append-only,
   write-ahead PENDING→ACTIVE/REVOKED), `config` (per-guild; all fields in §5),
@@ -105,7 +108,29 @@ precede optional ones (Discord 50035).
   list exactly — currently the master `1479589523426902208` ONLY), else
   configured owners + guild owner. `alertOwners` returns delivered count.
 
-## 5. Config model (per guild, in `config` table)
+## 5. Message audit logging (edits & deletes)
+
+**Everything that happens to a message is mirrored to the log channel**
+(user directive 2026-10-03): `messageUpdate`, `messageDelete`,
+`messageBulkDelete` → `lib/messageLog.js` → `sendAuditLog`.
+
+- **Edit logs** show Before/After content (+ attachment diff) with a jump
+  link. Cached edits log only real content/attachment changes; uncached edits
+  still log with Before = *not cached*; link-preview unfurls and the bot's own
+  embed-only refreshes are filtered out.
+- **Delete logs** show author, content, attachments (name/type/size/URL) and
+  embeds/links. Uncached deletes degrade to a *not cached* note.
+- **Attribution:** resolved from the audit log (target = message AUTHOR,
+  `options.channel_id`, with a short retry for lag). **Discord creates NO
+  audit entry when an account deletes its own message** — attribution appears
+  when a mod deletes someone else's message (verified audit-entry shape:
+  action 72, user_id = executor). Self-deletes log content without a name.
+- Intents: message events need **GuildMessages** (unprivileged — the missing
+  piece that made handlers silent); MessageContent (app flag already ON,
+  LIMITED) gates content visibility. Message cache (100/channel) is required
+  for before/after content.
+
+## 6. Config model (per guild, in `config` table)
 
 logChannelId · modRoleIds · ownerIds · raidThreshold (default 10) ·
 nukeAutoAction (0/1) · controlPanelChannelId · controlPanelMessageId ·
@@ -116,7 +141,7 @@ Live values: log `1555862906397270047` (#eternyx-logs), mod role
 `1555862852940865647` (#eternyx-control), auto-role user `1472935152421306603`
 (@New Worlder), auto-role bot `1544560111865827338` (@Pirates).
 
-## 6. Control panel + DM pinning
+## 7. Control panel + DM pinning
 
 - **/panel** posts a persistent button panel to #eternyx-control (live message
   `1555871244078030859`): **Lockdown ON/OFF** (owner-only) + **Status** (mods).
@@ -129,7 +154,7 @@ Live values: log `1555862906397270047` (#eternyx-logs), mod role
 - Moderation target DMs (ban/kick notices) are separate and only fire when a
   moderator opts in on that action.
 
-## 7. Announcements
+## 8. Announcements
 
 - Dashboard Announcements tab: channel + title + message, **role picker** and
   **user picker** (members list in snapshot — humans only, cap 200, refreshed by
@@ -144,7 +169,7 @@ Live values: log `1555862906397270047` (#eternyx-logs), mod role
 - **Role must be `mentionable:true`** for a role ping to fire — @New Worlder was
   un-mentionable and got flipped (PATCH role) before the announcement pinged.
 
-## 8. Brand image (fixed embed image)
+## 9. Brand image (fixed embed image)
 
 Every bot message **outside the log channel** carries the Kafka artwork
 (`assets/kafka.png`, 1200×675) as its embed image — including owner DMs.
@@ -163,7 +188,7 @@ Verified live 2026-10-03: #test announcement embed image = uploaded CDN
 `kafka.png` attachment; log-channel test alert has no image; owner DM delivered
 1/1 with the branded payload. Tests: test/brand.test.js (32 total).
 
-## 9. Dashboard (SIGNAL design v3)
+## 10. Dashboard (SIGNAL design v3)
 
 - **Design:** ink/lime brutalist — dot-grid base, acid-lime/magenta/cyan/amber,
   hazard strips, hard offset shadows; Syne + Archivo + JetBrains Mono; lucide
@@ -188,7 +213,7 @@ Verified live 2026-10-03: #test announcement embed image = uploaded CDN
 - Access flow: login key (`DASHBOARD_ACCESS_KEY`, user-fixed value, phone-only)
   → httpOnly cookie → proxy.js gates /dashboard + /api/overview + /api/setup.
 
-## 10. Deployment & ops
+## 11. Deployment & ops
 
 - **Phone access (working):** `adb forward tcp:8022 tcp:8022` (adb at
   `%LOCALAPPDATA%\platform-tools-tmp\platform-tools\adb.exe`, serial
@@ -206,7 +231,7 @@ Verified live 2026-10-03: #test announcement embed image = uploaded CDN
 - **Usage panel:** `sh ~/eternyx-bot/deploy/termux/panel.sh` (--once flag).
 - Repo history is PC-only; the phone has no git — syncs are tar/scp.
 
-## 11. Gotchas — NEVER relearn
+## 12. Gotchas — NEVER relearn
 
 **Termux/phone:** SSH needs 127.0.0.1 not localhost (IPv6 quirk) · `/tmp` does
 not exist (use $HOME) · no `which` (use `command -v`) · avoid nested quotes in
@@ -234,14 +259,17 @@ orphan blobs) + `cacheControlMaxAge:60` · never `vercel --prod` from dashboard/
 per trigger type (preset 4, spam 5) → make creates idempotent (find by name,
 edit in place) · role pings require the role be `mentionable` · member cache is
 online-only → throttle `members.fetch()` for pickers · 50035: required options
-first.
+first · **message events need the GuildMessages intent — MessageContent alone
+delivers nothing (handlers were silently dead until GuildMessages was added);
+self-deletes never appear in the audit log (no attribution possible), and
+audit entries can lag a couple of seconds (resolveDeleter retries).**
 
 **Misc:** Vercel 402 account-wide disable (2026-10-03) took all 7 projects down
 — phone hosting is now canonical and needs no Vercel; if Vercel returns, delete
 orphan blobs manually in the Storage tab. Mimosa PreToolUse hook false-positives
 on interaction→storage dataflow — count/wrap at load time (local modules only).
 
-## 12. Outstanding items
+## 13. Outstanding items
 
 1. **Rotate secrets** — bot token + dashboard keys were pasted in plaintext
    chat historically. Rotate via portal → edit phone `.env` → `sv restart bot`.
@@ -253,7 +281,7 @@ on interaction→storage dataflow — count/wrap at load time (local modules onl
    "security-certified".
 4. Vercel account still disabled; dashboard lives on the phone tunnel.
 
-## 13. Why / How to apply
+## 14. Why / How to apply
 
 **Why:** the SSH/adb workflow, guard semantics, and gotchas above recur every
 session; hosting is stable by user decree (phone always online, ample
