@@ -31,12 +31,15 @@ async function wakeBot() {
     }
   };
   try {
-    if (process.platform !== 'linux') return note('skip: not linux');
     const pidFile = process.env.BOT_PID_FILE;
     if (!pidFile) return note('skip: BOT_PID_FILE unset');
     const pid = Number((await readFile(pidFile, 'utf8')).trim());
     if (!Number.isInteger(pid) || pid <= 0) return note('skip: bad pidfile');
+    // NOTE: no process.platform check here — the bundler folds it to the
+    // BUILD machine's platform (win32 on the PC) and the wake would never
+    // fire. The /proc read below IS the Linux check: it only succeeds there.
     const cmdline = await readFile(`/proc/${pid}/cmdline`, 'utf8').catch(() => '');
+    if (!cmdline) return note(`skip: no /proc for pid ${pid}`);
     if (!cmdline.includes('eternyx-bot') && !cmdline.includes('src/index')) {
       return note(`skip: pid ${pid} is not the bot`);
     }
