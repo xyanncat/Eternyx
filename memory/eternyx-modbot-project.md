@@ -16,6 +16,10 @@ metadata:
 > every decision that matters, all verified state, and the gotchas that must
 > never be relearned. If a fact here conflicts with the code, trust the code
 > and update this file.
+>
+> **This is THE single memory file (user directive 2026-10-03).** All other
+> memory files (MEMORY.md index, legacy `Project Memory/` folder) were removed.
+> Keep it updated in place, time to time, as facts change.
 
 # Eternyx — project memory (complete record, 2026-10-03)
 
@@ -140,7 +144,26 @@ Live values: log `1555862906397270047` (#eternyx-logs), mod role
 - **Role must be `mentionable:true`** for a role ping to fire — @New Worlder was
   un-mentionable and got flipped (PATCH role) before the announcement pinged.
 
-## 8. Dashboard (SIGNAL design v3)
+## 8. Brand image (fixed embed image)
+
+Every bot message **outside the log channel** carries the Kafka artwork
+(`assets/kafka.png`, 1200×675) as its embed image — including owner DMs.
+Log-channel audit embeds stay clean. Mechanics: Discord CDN URLs are signed and
+expire, so the PNG ships with the bot and is attached per send as
+`attachment://kafka.png` (`lib/brand.js` → `applyBrand`).
+
+Wiring: `interactionCreate.execute` wraps each interaction's
+`reply`/`followUp`/`editReply` (covers ALL slash commands and panel buttons),
+`alertOwners` brands owner DMs, `postPanel` brands the control panel,
+`lib/commands.js` announce brands announcements. `applyBrand` is non-mutating,
+respects embeds that already have an image, and degrades to plain embeds if the
+asset is missing (branding must never break a send).
+
+Verified live 2026-10-03: #test announcement embed image = uploaded CDN
+`kafka.png` attachment; log-channel test alert has no image; owner DM delivered
+1/1 with the branded payload. Tests: test/brand.test.js (32 total).
+
+## 9. Dashboard (SIGNAL design v3)
 
 - **Design:** ink/lime brutalist — dot-grid base, acid-lime/magenta/cyan/amber,
   hazard strips, hard offset shadows; Syne + Archivo + JetBrains Mono; lucide
@@ -165,14 +188,14 @@ Live values: log `1555862906397270047` (#eternyx-logs), mod role
 - Access flow: login key (`DASHBOARD_ACCESS_KEY`, user-fixed value, phone-only)
   → httpOnly cookie → proxy.js gates /dashboard + /api/overview + /api/setup.
 
-## 9. Deployment & ops
+## 10. Deployment & ops
 
 - **Phone access (working):** `adb forward tcp:8022 tcp:8022` (adb at
   `%LOCALAPPDATA%\platform-tools-tmp\platform-tools\adb.exe`, serial
   005302500508) then `ssh -i ~/.ssh/eternyx_phone -p 8022 **127.0.0.1**`.
-- **Bot update:** tar+scp `src/` → extract into `~/eternyx-bot` →
-  `SVDIR=$PREFIX/var/service sv restart bot`. New commands also need
-  `npm run deploy-commands` ON THE PHONE.
+- **Bot update:** tar+scp **`src/` AND `assets/`** (the brand image lives in
+  assets/) → extract into `~/eternyx-bot` → `SVDIR=$PREFIX/var/service sv restart bot`.
+  New commands also need `npm run deploy-commands` ON THE PHONE.
 - **Web update:** build on PC (`npm run build`) → stage
   `.next/standalone/*` + `.next/static` → tar+scp → extract to `~/eternyx-web`
   → `sv restart web`. Scripts: `deploy/termux/ship-web.sh` /
@@ -183,7 +206,7 @@ Live values: log `1555862906397270047` (#eternyx-logs), mod role
 - **Usage panel:** `sh ~/eternyx-bot/deploy/termux/panel.sh` (--once flag).
 - Repo history is PC-only; the phone has no git — syncs are tar/scp.
 
-## 10. Gotchas — NEVER relearn
+## 11. Gotchas — NEVER relearn
 
 **Termux/phone:** SSH needs 127.0.0.1 not localhost (IPv6 quirk) · `/tmp` does
 not exist (use $HOME) · no `which` (use `command -v`) · avoid nested quotes in
@@ -218,7 +241,7 @@ first.
 orphan blobs manually in the Storage tab. Mimosa PreToolUse hook false-positives
 on interaction→storage dataflow — count/wrap at load time (local modules only).
 
-## 11. Outstanding items
+## 12. Outstanding items
 
 1. **Rotate secrets** — bot token + dashboard keys were pasted in plaintext
    chat historically. Rotate via portal → edit phone `.env` → `sv restart bot`.
@@ -230,7 +253,7 @@ on interaction→storage dataflow — count/wrap at load time (local modules onl
    "security-certified".
 4. Vercel account still disabled; dashboard lives on the phone tunnel.
 
-## 12. Why / How to apply
+## 13. Why / How to apply
 
 **Why:** the SSH/adb workflow, guard semantics, and gotchas above recur every
 session; hosting is stable by user decree (phone always online, ample

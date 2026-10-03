@@ -5,6 +5,7 @@
 // (lib/perms.js still treats the server owner + OWNER_IDS as owners).
 import { env } from '../config.js';
 import { getConfig } from '../storage/db.js';
+import { applyBrand } from './brand.js';
 
 export function alertRecipients(guild) {
   const cfg = getConfig(guild.id);
@@ -17,7 +18,8 @@ export async function alertOwners(guild, embed) {
   for (const id of alertRecipients(guild)) {
     const user = await guild.client.users.fetch(id).catch(() => null);
     if (!user) continue;
-    const ok = await user.send({ embeds: [embed] }).then(() => true).catch(() => false);
+    // Owner DMs get the fixed brand image too (user requirement).
+    const ok = await user.send(applyBrand({ embeds: [embed] })).then(() => true).catch(() => false);
     if (ok) sent += 1;
   }
   return sent;

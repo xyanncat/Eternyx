@@ -8,8 +8,19 @@ import { checkCooldown } from '../lib/cooldowns.js';
 import { isMod, isOwner } from '../lib/perms.js';
 import { getConfig } from '../storage/db.js';
 import { logger } from '../lib/log.js';
+import { applyBrand } from '../lib/brand.js';
 
 export const name = Events.InteractionCreate;
+
+// Every interaction response (slash replies, buttons) carries the fixed brand
+// image. deferReply is deliberately not wrapped (no content yet).
+function brandInteraction(interaction) {
+  for (const method of ['reply', 'followUp', 'editReply']) {
+    const original = interaction[method]?.bind(interaction);
+    if (!original) continue;
+    interaction[method] = (options) => original(applyBrand(options));
+  }
+}
 
 async function handleButton(interaction, cfg) {
   const [ns, action, arg] = interaction.customId.split(':');
@@ -66,6 +77,7 @@ async function handleButton(interaction, cfg) {
 }
 
 export async function execute(interaction) {
+  brandInteraction(interaction);
   if (interaction.isButton()) {
     const cfg = getConfig(interaction.guildId);
     try {

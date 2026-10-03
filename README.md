@@ -1,5 +1,8 @@
 # Eternyx Moderation Bot
 
+> Project memory (single living file — read before changes):
+> [`memory/eternyx-modbot-project.md`](./memory/eternyx-modbot-project.md)
+
 Security-first Discord moderation bot for the dev server. **Slash commands only**,
 **every response is an embed**, designed to run 24/7 on a spare Android phone
 (Termux). Design doc: [MODBOT_PLAN.md](./MODBOT_PLAN.md).

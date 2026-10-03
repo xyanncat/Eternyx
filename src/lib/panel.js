@@ -9,6 +9,7 @@
 import { ActionRowBuilder, ButtonBuilder, ButtonStyle } from 'discord.js';
 import { getConfig, setConfig } from '../storage/db.js';
 import { buildEmbed } from './embeds.js';
+import { applyBrand } from './brand.js';
 import { logger } from './log.js';
 
 export const PANEL_PREFIX = 'panel';
@@ -84,7 +85,7 @@ export async function postPanel(guild, channel) {
     await old?.delete().catch(() => {});
   }
   const state = await panelState(guild);
-  const message = await channel.send({ embeds: [panelEmbed(guild, state)], components: [panelButtons()] });
+  const message = await channel.send(applyBrand({ embeds: [panelEmbed(guild, state)], components: [panelButtons()] }));
   setConfig(guild.id, { controlPanelChannelId: channel.id, controlPanelMessageId: message.id });
   logger.info(`control panel posted in ${channel.id} (${message.id})`);
   return message;

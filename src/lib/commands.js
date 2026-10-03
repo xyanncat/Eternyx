@@ -230,11 +230,12 @@ export async function executeCommand(client, { action, params = {}, createdBy = 
           description: params.message,
           moderator: client.user,
         });
-        await ch.send({
+        const { applyBrand } = await import('./brand.js');
+        await ch.send(applyBrand({
           content: mentionText || undefined,
           embeds: [embed],
           allowedMentions: { parse: [], roles: mentionRoles, users: mentionUsers },
-        });
+        }));
         const pinged = [
           mentionRoles.length ? `${mentionRoles.length} role(s)` : null,
           mentionUsers.length ? `${mentionUsers.length} user(s)` : null,
