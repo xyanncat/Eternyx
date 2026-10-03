@@ -21,17 +21,29 @@ const MAX_RESULTS = 50;
 // signalled when /proc proves it is the bot process (pid reuse would
 // otherwise SIGUSR1-kill an unrelated process, whose default action is death).
 async function wakeBot() {
+  // Outcome is logged to stderr (phone: ~/eternyx-web/err.log) — a silent
+  // skip here would be indistinguishable from a working wake.
+  const note = (m) => {
+    try {
+      console.error(`[wake] ${m}`);
+    } catch {
+      /* logging must never break the dispatch */
+    }
+  };
   try {
-    if (process.platform !== 'linux') return;
+    if (process.platform !== 'linux') return note('skip: not linux');
     const pidFile = process.env.BOT_PID_FILE;
-    if (!pidFile) return;
+    if (!pidFile) return note('skip: BOT_PID_FILE unset');
     const pid = Number((await readFile(pidFile, 'utf8')).trim());
-    if (!Number.isInteger(pid) || pid <= 0) return;
+    if (!Number.isInteger(pid) || pid <= 0) return note('skip: bad pidfile');
     const cmdline = await readFile(`/proc/${pid}/cmdline`, 'utf8').catch(() => '');
-    if (!cmdline.includes('eternyx-bot') && !cmdline.includes('src/index')) return;
+    if (!cmdline.includes('eternyx-bot') && !cmdline.includes('src/index')) {
+      return note(`skip: pid ${pid} is not the bot`);
+    }
     process.kill(pid, 'SIGUSR1');
-  } catch {
-    /* poll loop remains the backstop */
+    note(`signalled bot pid ${pid}`);
+  } catch (err) {
+    note(`failed: ${err.message}`);
   }
 }
 
