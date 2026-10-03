@@ -1,10 +1,13 @@
-// Remote dashboard reporting + command execution (Vercel). Every 60s:
+// Dashboard reporting + command execution. Every 60s — plus instantly when
+// woken: the on-phone web sends SIGUSR1 the moment a command is queued, so
+// dispatches apply in seconds instead of waiting for the next cycle.
 // 1. pull the encrypted pending-command queue from the dashboard
 // 2. execute each command (allowlisted, validated) and collect acks
 // 3. push the full snapshot (incl. guild channels/roles + config) with acks
 // Outbound only, the phone never exposes an inbound port (plan §3).
 // Disabled silently unless DASHBOARD_URL + DASHBOARD_INGEST_KEY are set.
 import { readFile } from 'node:fs/promises';
+import { writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { ROOT, env } from '../config.js';
 import { topCommands, recentCases, recentEvents, getConfig } from '../storage/db.js';
@@ -19,7 +22,42 @@ export function startDashboardReporting(client) {
     logger.info('dashboard reporting disabled (DASHBOARD_URL / DASHBOARD_INGEST_KEY not set)');
     return;
   }
-  const cycle = async () => {
+  // PID file so the on-phone web can wake us instantly on dispatch.
+  // data/ is gitignored; a stale file is harmless (the web verifies the
+  // process via /proc before signalling).
+  try {
+    writeFileSync(path.join(ROOT, 'data', 'bot.pid'), String(process.pid));
+  } catch (err) {
+    logger.warn(`dashboard wake unavailable (pidfile): ${err.message}`);
+  }
+  let cycling = false;
+  let wakeQueued = false;
+  const run = async () => {
+    if (cycling) {
+      wakeQueued = true; // a cycle is mid-flight; run again right after
+      return;
+    }
+    cycling = true;
+    try {
+      await cycle(client);
+    } finally {
+      cycling = false;
+    }
+    if (wakeQueued) {
+      wakeQueued = false;
+      run();
+    }
+  };
+  if (process.platform !== 'win32') {
+    process.on('SIGUSR1', () => {
+      logger.info('dashboard wake — pulling queue now');
+      run();
+    });
+  }
+  run();
+  setInterval(run, INTERVAL_MS).unref();
+
+  async function cycle(client) {
     try {
       const queue = await pullQueue();
       const acks = [];
@@ -33,9 +71,7 @@ export function startDashboardReporting(client) {
     } catch (err) {
       logger.warn(`dashboard cycle failed: ${err.message}`);
     }
-  };
-  cycle();
-  setInterval(cycle, INTERVAL_MS).unref();
+  }
 }
 
 function api(path) {

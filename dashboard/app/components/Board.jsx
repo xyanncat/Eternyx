@@ -123,7 +123,7 @@ export default function Board({ initial }) {
       });
       const data = await res.json();
       if (data.ok) {
-        showToast(`Queued — the phone picks it up within a minute.`);
+        showToast(`Sent — applying on the server now.`);
         poll();
       } else {
         showToast(data.error || 'Failed to dispatch command', true);
@@ -236,7 +236,7 @@ export default function Board({ initial }) {
         {queue.length > 0 && (
           <div className="card section queue-strip">
             <h2>Waiting on the phone ({queue.length})</h2>
-            <p className="lede">Dispatched from here, executes on the next phone sync.</p>
+            <p className="lede">Dispatched from here — the bot applies it in seconds.</p>
             <ul className="queue-list">
               {queue.map((c) => (
                 <li key={c.id}>

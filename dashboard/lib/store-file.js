@@ -7,13 +7,33 @@ import path from 'node:path';
 import { randomUUID } from 'node:crypto';
 import { deriveKey, encrypt, decrypt } from './vault';
 import { seedSnapshot } from './seed';
-
 const DIR = process.env.DATA_DIR ?? path.join(process.cwd(), 'data-web');
 const SNAPSHOT_FILE = 'snapshot.bin';
 const QUEUE_FILE = 'commands.bin';
 const RESULTS_FILE = 'command-results.bin';
 const MAX_QUEUE = 25;
 const MAX_RESULTS = 50;
+
+// Wake the on-phone bot the instant a command is queued, so dispatches apply
+// in seconds instead of waiting for its 60s poll. Fire-and-forget by design:
+// a stale pidfile, a restarting bot, or a non-Linux host all fall through
+// silently and the poll loop remains the backstop. Safety: the pid is only
+// signalled when /proc proves it is the bot process (pid reuse would
+// otherwise SIGUSR1-kill an unrelated process, whose default action is death).
+async function wakeBot() {
+  try {
+    if (process.platform !== 'linux') return;
+    const pidFile = process.env.BOT_PID_FILE;
+    if (!pidFile) return;
+    const pid = Number((await readFile(pidFile, 'utf8')).trim());
+    if (!Number.isInteger(pid) || pid <= 0) return;
+    const cmdline = await readFile(`/proc/${pid}/cmdline`, 'utf8').catch(() => '');
+    if (!cmdline.includes('eternyx-bot') && !cmdline.includes('src/index')) return;
+    process.kill(pid, 'SIGUSR1');
+  } catch {
+    /* poll loop remains the backstop */
+  }
+}
 
 async function readJson(file, fallback) {
   if (!deriveKey()) return fallback;
@@ -60,6 +80,7 @@ export async function enqueueCommand({ action, params, createdBy }) {
   queue.push(command);
   if (queue.length > MAX_QUEUE) queue.splice(0, queue.length - MAX_QUEUE);
   await writeJson(QUEUE_FILE, queue);
+  await wakeBot();
   return command;
 }
 

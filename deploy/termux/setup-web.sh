@@ -31,6 +31,9 @@ set -a
 . "$WEB_DIR/.env.web"
 set +a
 export PORT=3000 HOSTNAME=127.0.0.1 STORE_BACKEND=file DATA_DIR="\$HOME/eternyx-web/data"
+# PID file the bot writes on start — the web signals it (SIGUSR1) the instant
+# a dashboard command is queued, so dispatches apply in seconds.
+export BOT_PID_FILE="\$HOME/eternyx-bot/data/bot.pid"
 # Heap cap like the bot: a runaway page render kills only this process,
 # runit restarts it in seconds. wake-lock is NOT exec'd (see bot gotcha).
 termux-wake-lock >/dev/null 2>&1 || true
