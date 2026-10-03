@@ -89,7 +89,9 @@ export default function Board({ initial }) {
   };
 
   useEffect(() => {
-    const timer = setInterval(poll, 10000);
+    // 60s matches the phone's push/pull cadence — faster polling only burns
+    // Vercel function + Blob invocations without fresher data.
+    const timer = setInterval(poll, 60000);
     poll();
     return () => clearInterval(timer);
     // eslint-disable-next-line react-hooks/exhaustive-deps
