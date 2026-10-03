@@ -67,6 +67,14 @@ export function validateCommand({ action, params = {} }) {
       if (p.title != null && (typeof p.title !== 'string' || p.title.length > 256)) {
         return { ok: false, reason: 'title must be ≤256 chars' };
       }
+      // Optional mention lists (roles/users) — snowflakes only, capped.
+      for (const field of ['mentionRoleIds', 'mentionUserIds']) {
+        const list = p[field];
+        if (list == null) continue;
+        if (!Array.isArray(list) || list.length > 5 || !list.every((id) => isSnowflake(id))) {
+          return { ok: false, reason: `${field} must be up to 5 snowflake IDs` };
+        }
+      }
       return { ok: true };
     case 'set-slowmode': {
       if (!isSnowflake(p.channelId ?? '')) return { ok: false, reason: 'missing/invalid channelId' };
@@ -175,14 +183,31 @@ export async function executeCommand(client, { action, params = {}, createdBy = 
       case 'announce': {
         const ch = channelOf(guild, params.channelId);
         if (!ch?.isTextBased()) return { ok: false, detail: 'channel not found or not text-based' };
+        // Resolve mentions against the live guild — stale IDs are dropped
+        // (never guess), and allowedMentions is an explicit allowlist so no
+        // other text in the announcement can ping anyone.
+        const mentionRoles = (params.mentionRoleIds ?? []).filter((id) => guild.roles.cache.has(id));
+        const mentionUsers = (params.mentionUserIds ?? []).filter((id) => guild.members.cache.has(id));
+        const mentionText = [
+          ...mentionRoles.map((id) => `<@&${id}>`),
+          ...mentionUsers.map((id) => `<@${id}>`),
+        ].join(' ');
         const embed = buildEmbed({
           kind: 'info',
           title: params.title || 'Announcement',
           description: params.message,
           moderator: client.user,
         });
-        await ch.send({ embeds: [embed] });
-        return { ok: true, detail: `announced in <#${ch.id}>` };
+        await ch.send({
+          content: mentionText || undefined,
+          embeds: [embed],
+          allowedMentions: { parse: [], roles: mentionRoles, users: mentionUsers },
+        });
+        const pinged = [
+          mentionRoles.length ? `${mentionRoles.length} role(s)` : null,
+          mentionUsers.length ? `${mentionUsers.length} user(s)` : null,
+        ].filter(Boolean).join(' + ');
+        return { ok: true, detail: `announced in <#${ch.id}>${pinged ? ` — pinging ${pinged}` : ''}` };
       }
       case 'set-slowmode': {
         const ch = channelOf(guild, params.channelId);

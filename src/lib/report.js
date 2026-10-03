@@ -16,6 +16,8 @@ import { logger } from './log.js';
 
 const INTERVAL_MS = 60_000;
 const MAX_COMMANDS_PER_CYCLE = 10;
+const MEMBER_REFRESH_MS = 10 * 60_000; // keep the announcement user-picker populated
+let lastMemberRefresh = 0;
 
 export function startDashboardReporting(client) {
   if (!env.DASHBOARD_URL || !env.DASHBOARD_INGEST_KEY) {
@@ -89,6 +91,12 @@ async function pullQueue() {
 
 async function pushSnapshot(client, acks = []) {
   const guild = client.guilds.cache.first();
+  // Refresh the member cache at most every 10 min so the dashboard's
+  // announcement user picker is complete, not just online members.
+  if (guild && Date.now() - lastMemberRefresh > MEMBER_REFRESH_MS) {
+    lastMemberRefresh = Date.now();
+    await guild.members.fetch().catch(() => {});
+  }
   const logText = await readFile(path.join(ROOT, 'logs', 'bot.log'), 'utf8').catch(() => '');
   const cfg = guild ? getConfig(guild.id) : {};
   const body = {
@@ -117,6 +125,12 @@ async function pushSnapshot(client, acks = []) {
               return [];
             }
           })(),
+          // Member list powers the announcement user picker. Humans only,
+          // capped — the snapshot is encrypted at rest and key-gated.
+          members: [...guild.members.cache.values()]
+            .filter((m) => !m.user.bot)
+            .slice(0, 200)
+            .map((m) => ({ id: m.id, name: m.displayName || m.user.username })),
         }
       : null,
     config: guild

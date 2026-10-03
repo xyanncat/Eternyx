@@ -80,6 +80,8 @@ export default function Board({ initial }) {
   const [annChannel, setAnnChannel] = useState('');
   const [annTitle, setAnnTitle] = useState('Important Server Announcement');
   const [annMessage, setAnnMessage] = useState('');
+  const [annRole, setAnnRole] = useState('');
+  const [annUser, setAnnUser] = useState('');
 
   // Channel Lock & Slowmode
   const [targetChannel, setTargetChannel] = useState('');
@@ -528,6 +530,36 @@ export default function Board({ initial }) {
                       onChange={(e) => setAnnMessage(e.target.value)}
                     />
                   </div>
+                  <div className="field">
+                    <label>Ping a role (optional)</label>
+                    <select
+                      className="input"
+                      value={annRole}
+                      onChange={(e) => setAnnRole(e.target.value)}
+                    >
+                      <option value="">No role ping</option>
+                      {roles.map((r) => (
+                        <option key={r.id} value={r.id}>
+                          @{r.name}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                  <div className="field">
+                    <label>Ping a user (optional)</label>
+                    <select
+                      className="input"
+                      value={annUser}
+                      onChange={(e) => setAnnUser(e.target.value)}
+                    >
+                      <option value="">No user ping</option>
+                      {(guild.members || []).map((m) => (
+                        <option key={m.id} value={m.id}>
+                          {m.name}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
                   <button
                     className="btn"
                     disabled={loading || !annChannel || !annMessage.trim()}
@@ -536,6 +568,8 @@ export default function Board({ initial }) {
                         channelId: annChannel,
                         title: annTitle,
                         message: annMessage,
+                        mentionRoleIds: annRole ? [annRole] : [],
+                        mentionUserIds: annUser ? [annUser] : [],
                       });
                       setAnnMessage('');
                     }}
@@ -552,6 +586,20 @@ export default function Board({ initial }) {
                   </div>
                   <p className="lede">Renders exactly like the Discord embed.</p>
                   <div className="embed-mock">
+                    {(annRole || annUser) && (
+                      <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 10 }}>
+                        {annRole && (
+                          <span style={{ background: 'rgba(88,101,242,0.25)', color: 'var(--accent2)', padding: '2px 8px', borderRadius: 6, fontSize: 13, fontWeight: 600 }}>
+                            @{roles.find((r) => r.id === annRole)?.name ?? 'role'}
+                          </span>
+                        )}
+                        {annUser && (
+                          <span style={{ background: 'rgba(88,101,242,0.25)', color: 'var(--accent2)', padding: '2px 8px', borderRadius: 6, fontSize: 13, fontWeight: 600 }}>
+                            @{(guild.members || []).find((m) => m.id === annUser)?.name ?? 'user'}
+                          </span>
+                        )}
+                      </div>
+                    )}
                     <div className="author">
                       <span className="led" aria-hidden="true" />
                       Eternyx Bot
