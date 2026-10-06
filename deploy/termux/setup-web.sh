@@ -51,6 +51,15 @@ exec cloudflared tunnel --url http://127.0.0.1:3000 >>"$WEB_DIR/tunnel.log" 2>&1
 EOF
 chmod +x "$PREFIX/var/service/tunnel/run"
 
+echo "[5/4] Refreshing the one-command starter (now covers web+tunnel)…"
+if [ -f "$HOME/eternyx-bot/deploy/termux/start-local.sh" ]; then
+  cp "$HOME/eternyx-bot/deploy/termux/start-local.sh" "$HOME/start-eternyx.sh"
+  chmod +x "$HOME/start-eternyx.sh"
+  mkdir -p "$HOME/.shortcuts"
+  cp "$HOME/eternyx-bot/deploy/termux/start-local.sh" "$HOME/.shortcuts/eternyx-online.sh"
+  chmod +x "$HOME/.shortcuts/eternyx-online.sh"
+fi
+
 cat <<'EOF'
 
 Next steps (one time):

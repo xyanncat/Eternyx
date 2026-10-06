@@ -27,21 +27,22 @@ exec node --max-old-space-size=256 src/index.js 2>> logs/err.log
 EOF
 chmod +x "$PREFIX/var/service/bot/run"
 
-echo "[4/6] Creating the boot hook (starts the bot after phone reboot)…"
+echo "[4/6] Installing the one-command starter + boot hook (Termux-only recovery)…"
+# Canonical starter: a self-contained copy at ~/start-eternyx.sh so the boot
+# path never depends on repo files (bot updates ship src/+assets/ only).
+cp "$REPO_DIR/deploy/termux/start-local.sh" "$HOME/start-eternyx.sh"
+chmod +x "$HOME/start-eternyx.sh"
+# One-tap widget button (lights up if the Termux:Widget app is installed).
+mkdir -p "$HOME/.shortcuts"
+cp "$REPO_DIR/deploy/termux/start-local.sh" "$HOME/.shortcuts/eternyx-online.sh"
+chmod +x "$HOME/.shortcuts/eternyx-online.sh"
+# Boot hook stays tiny and delegates — the boot context is fragile
+# (no profile, no SVDIR); all logic lives in start-eternyx.sh.
 mkdir -p "$HOME/.termux/boot"
 cat > "$HOME/.termux/boot/start-services.sh" <<'EOF'
 #!/data/data/com.termux/files/usr/bin/sh
-# SVDIR is not exported in every boot context — set it explicitly.
-export SVDIR="/data/data/com.termux/files/usr/var/service"
-termux-wake-lock
-# runsvdir may not be running yet in the boot context — ensure it is,
-# otherwise `sv up` fails with "unable to change to service directory".
-pgrep -x runsvdir >/dev/null 2>&1 || setsid runsvdir "$SVDIR" >/dev/null 2>&1 &
-sleep 2
-sv up bot
-# sshd: the runit sshd service (sshd -D -e) fails on this phone — start the
-# daemon directly instead, which is the mode proven to work.
-pgrep -x sshd >/dev/null 2>&1 || sshd
+# Termux:Boot hook — delegates to the canonical bring-online script.
+sh "$HOME/start-eternyx.sh" >>"$HOME/eternyx-boot.log" 2>&1
 EOF
 chmod +x "$HOME/.termux/boot/start-services.sh"
 
@@ -69,4 +70,8 @@ Next steps:
   cp .env.example .env   # fill in DISCORD_TOKEN, CLIENT_ID, GUILD_ID, OWNER_IDS
   npm run deploy-commands
   sv up bot              # start;  sv status bot;  sv restart bot
+
+After ANY reboot, no PC needed — in Termux run:
+  sh ~/start-eternyx.sh  # brings bot+web+tunnel online, prints public URL
+(Or tap the Eternyx Online widget button if Termux:Widget is installed.)
 EOF
