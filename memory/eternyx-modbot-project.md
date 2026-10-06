@@ -9,7 +9,7 @@ metadata:
   type: project
   originSessionId: sess_cd7540c2-fee4-4261-80ec-d146b3aa0780
   memoryDir: memory/
-  updated: 2026-10-03
+  updated: 2026-10-06
 ---
 
 > Read this before touching Eternyx. It records the complete architecture,
@@ -228,6 +228,17 @@ Verified live 2026-10-03: #test announcement embed image = uploaded CDN
   nightly backup).
 - **Public URL:** `grep -o 'https://[^ ]*trycloudflare.com' ~/eternyx-web/tunnel.log | tail -1`
   (rotates on tunnel restart; the bot always uses 127.0.0.1:3000).
+- **Local bring-online, no PC (2026-10-06, commit 6999ae6):**
+  `sh ~/start-eternyx.sh` — canonical starter, installed by setup.sh and
+  refreshed by setup-web.sh. Does wake-lock → runsvdir self-heal → sshd →
+  `sv up` bot/web/tunnel/crond → 10 s settle → verifies (sv status, bot-log
+  tail, snapshot freshness <180 s, local web HTTP 200, tunnel URL) and prints
+  next steps. Verified live 2026-10-06: supervisor self-heal fired correctly
+  in a fresh context, all services run, snapshot 55 s old, web 200, tunnel URL
+  printed. Boot hook `~/.termux/boot/start-services.sh` is now a 3-line
+  delegate to the starter (boot context is fragile; all logic lives in the
+  starter). One-tap widget button at `~/.shortcuts/eternyx-online.sh` (lights
+  up if the Termux:Widget app is installed).
 - **Usage panel:** `sh ~/eternyx-bot/deploy/termux/panel.sh` (--once flag).
 - Repo history is PC-only; the phone has no git — syncs are tar/scp.
 
@@ -275,8 +286,10 @@ on interaction→storage dataflow — count/wrap at load time (local modules onl
    chat historically. Rotate via portal → edit phone `.env` → `sv restart bot`.
    Phone `DASHBOARD_ACCESS_KEY` is user-fixed now (do not rotate without asking).
 2. **MIUI Autostart for Termux:Boot** still NOT enabled by the user (Security
-   app → Autostart) — real reboots won't auto-start Termux until done. Recovery
-   drill: wake screen → open Termux → `sh ~/.termux/boot/start-services.sh`.
+   app → Autostart) — real reboots won't auto-start Termux until done. Until
+   then the drill is one command, no PC: open Termux → `sh ~/start-eternyx.sh`
+   (or tap the widget button). Boot hook already delegates to the starter, so
+   enabling Autostart later makes reboots fully zero-touch with no other change.
 3. Full Mimosa deep scan never completed (library-source limits) — do not claim
    "security-certified".
 4. Vercel account still disabled; dashboard lives on the phone tunnel.
