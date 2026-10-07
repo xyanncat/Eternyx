@@ -210,6 +210,13 @@ Verified live 2026-10-03: #test announcement embed image = uploaded CDN
 - **Realtime:** instant dispatch (~3 s) via SIGUSR1 wake; otherwise 60 s poll.
   Web reports every 60 s (snapshot: bot stats, channels, roles, members,
   automodRules, config — all encrypted).
+- **UI refresh (2026-10-07, commit 1cb6305):** Ribbon 3D-tilt hero art
+  (`public/images/eternyx-ribbon.png`) + new Overview section, restyled login/
+  board/globals. `ship-web.sh` now ships `public/` (standalone server does NOT
+  bundle it — without this the hero 404s). Phone-side health check
+  `deploy/termux/verify-web.cjs` (login → overview, asserts fresh live
+  snapshot; lives at `~/eternyx-web/verify-web.cjs`). Verified live on phone:
+  home 200, ribbon image 200, snapshot 14 s old, queue 0.
 - Access flow: login key (`DASHBOARD_ACCESS_KEY`, user-fixed value, phone-only)
   → httpOnly cookie → proxy.js gates /dashboard + /api/overview + /api/setup.
 
