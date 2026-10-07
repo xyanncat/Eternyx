@@ -6,5 +6,5 @@
 export const siteConfig = {
   name: 'Eternyx',
   tagline: 'Discord moderation command center',
-  footer: 'ETERNYX CORE · PHONE HOST + CLOUD DECK',
+  footer: 'Eternyx / Your server workspace',
 };

@@ -23,6 +23,7 @@ mkdir -p "$STAGE/web"
 cp -r .next/standalone/. "$STAGE/web/"
 mkdir -p "$STAGE/web/.next"
 cp -r .next/static "$STAGE/web/.next/static"
+cp -r public "$STAGE/web/public" 2>/dev/null || true
 cp ../dashboard/.env.web.example "$STAGE/web/"
 cp ../deploy/termux/setup-web.sh "$STAGE/"
 

@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { motion, AnimatePresence } from 'motion/react';
+import { motion, AnimatePresence, MotionConfig } from 'motion/react';
 import NumberFlow from '@number-flow/react';
 import {
   LayoutDashboard,
@@ -24,6 +24,7 @@ import {
   Send,
 } from 'lucide-react';
 import { siteConfig } from '@/lib/site-config';
+import Overview from './Overview';
 
 function ago(ts) {
   if (!ts) return 'never';
@@ -68,6 +69,8 @@ export default function Board({ initial }) {
   const [loading, setLoading] = useState(false);
   const [syncing, setSyncing] = useState(false);
   const [toast, setToast] = useState(null);
+  const [pollError, setPollError] = useState(false);
+  const [now, setNow] = useState(null);
 
   // Form states for setup actions
   const [selectedLogChannel, setSelectedLogChannel] = useState('');
@@ -99,14 +102,17 @@ export default function Board({ initial }) {
     setSyncing(true);
     try {
       const res = await fetch('/api/overview');
+      if (res.status === 401 || res.redirected) { window.location.href = '/'; return; }
       if (res.ok) {
         const data = await res.json();
+        setPollError(false);
+        setNow(Date.now());
         if (data.snapshot) setSnapshot(data.snapshot);
         if (data.queue) setQueue(data.queue);
         if (data.results) setResults(data.results);
-      }
+      } else { setPollError(true); }
     } catch {
-      /* silent retry */
+      setPollError(true);
     } finally {
       setSyncing(false);
     }
@@ -117,7 +123,8 @@ export default function Board({ initial }) {
     // Vercel function + Blob invocations without fresher data.
     const timer = setInterval(poll, 60000);
     poll();
-    return () => clearInterval(timer);
+    const clock = setInterval(() => setNow(Date.now()), 15000);
+    return () => { clearInterval(timer); clearInterval(clock); };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -149,7 +156,7 @@ export default function Board({ initial }) {
       });
       const data = await res.json();
       if (data.ok) {
-        showToast('SENT — APPLYING ON THE SERVER NOW');
+        showToast('Command queued. Waiting for the phone to apply it.');
         poll();
       } else {
         showToast(data.error || 'FAILED TO DISPATCH COMMAND', true);
@@ -176,22 +183,25 @@ export default function Board({ initial }) {
   const logs = snapshot.logs || [];
   const maxCount = Math.max(1, ...usage.map((u) => u.count));
   const isDemo = Boolean(snapshot.demo);
+  const connection = isDemo ? 'demo' : pollError || !snapshot.receivedAt || (now != null && now - snapshot.receivedAt > 180000) ? 'stale' : 'live';
   const lockdownActive = Boolean(snapshot?.config?.lockdownActive);
   const ramMb = bot.rssMb || 0;
   const ramPct = Math.min(100, Math.round((ramMb / 256) * 100));
   const section = SECTIONS.find((s) => s.id === activeTab) ?? SECTIONS[0];
 
   return (
+    <MotionConfig reducedMotion="user">
     <div className="shell">
       {/* ── Toast notification ────────────────────────────── */}
       <AnimatePresence>
         {toast && (
           <motion.div
-            initial={{ opacity: 0, y: -12 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: -12 }}
+            initial={{ opacity: 0, y: -12, x: '-50%' }}
+            animate={{ opacity: 1, y: 0, x: '-50%' }}
+            exit={{ opacity: 0, y: -12, x: '-50%' }}
             transition={{ duration: 0.2 }}
             className={`toast ${toast.isError ? 'toast-error' : ''}`}
+            role="status"
           >
             {toast.msg}
           </motion.div>
@@ -200,23 +210,21 @@ export default function Board({ initial }) {
 
       {/* ── Sidebar ───────────────────────────────────────── */}
       <aside className="side">
-        <div className="hazard-strip" aria-hidden="true" />
         <div className="brand">
           <div className="sigil" aria-hidden="true">E</div>
           <div>
             <div className="brand-name">{siteConfig.name}</div>
-            <div className="brand-sub">Control deck</div>
+            <div className="brand-sub">Server workspace</div>
           </div>
         </div>
-        <nav className="nav" role="tablist" aria-label="Dashboard sections">
+        <nav className="nav" aria-label="Dashboard sections">
           {SECTIONS.map((s) => {
             const Icon = s.icon;
             const active = activeTab === s.id;
             return (
               <button
                 key={s.id}
-                role="tab"
-                aria-selected={active}
+                aria-current={active ? 'page' : undefined}
                 className={`nav-item ${active ? 'active' : ''}`}
                 onClick={() => setActiveTab(s.id)}
               >
@@ -233,8 +241,8 @@ export default function Board({ initial }) {
         <div className="side-foot">
           <div className="sync-card">
             <div className="row">
-              <span className={`led ${isDemo ? 'off' : ''}`} aria-hidden="true" />
-              {isDemo ? 'Demo data' : 'Live sync'}
+              <span className={`led ${connection !== 'live' ? 'off' : ''}`} aria-hidden="true" />
+              {connection === 'demo' ? 'Demo workspace' : connection === 'live' ? 'Phone connected' : 'Update delayed'}
             </div>
             <div className="sub" suppressHydrationWarning>
               pushed {ago(snapshot.receivedAt)}
@@ -249,12 +257,10 @@ export default function Board({ initial }) {
       <div className="main">
         <header className="dash-head">
           <div>
-            <span className="kicker">Eternyx · {section.id}</span>
-            <h1>{section.label}</h1>
+            <h1>{activeTab === 'overview' ? 'Server overview' : section.label}</h1>
             <div className="sub dim" style={{ fontSize: 13.5 }}>
               {bot.guild ? <strong style={{ color: 'var(--text)' }}>{bot.guild}</strong> : null}
-              {bot.guild ? ' · ' : ''}
-              {section.blurb}
+              {!bot.guild || activeTab !== 'overview' ? ` ${section.blurb}` : ''}
             </div>
           </div>
           <div className="head-actions">
@@ -262,10 +268,10 @@ export default function Board({ initial }) {
               <span className="queue-chip">{queue.length} waiting on phone</span>
             )}
             <button className="btn ghost small" onClick={poll} disabled={syncing}>
-              <RotateCw size={13} className={syncing ? 'spin' : ''} aria-hidden="true" /> Sync
+              <RotateCw size={15} className={syncing ? 'spin' : ''} aria-hidden="true" /> Refresh
             </button>
             <button className="btn ghost small" onClick={logout}>
-              <LogOut size={13} aria-hidden="true" /> Exit
+              <LogOut size={15} aria-hidden="true" /> Sign out
             </button>
           </div>
         </header>
@@ -294,101 +300,8 @@ export default function Board({ initial }) {
           <AnimatePresence mode="wait">
             {/* OVERVIEW */}
             {activeTab === 'overview' && (
-              <motion.div key="overview" {...panelFade} className="stack">
-                <div className="stat-grid">
-                  <div className="card stat">
-                    <div className="k"><Cpu size={13} aria-hidden="true" /> Bot</div>
-                    <div className="v" style={{ fontSize: 22 }}>{bot.username || 'Offline'}</div>
-                    <div className="sub" suppressHydrationWarning>{bot.startedAt ? `started ${ago(bot.startedAt)}` : 'phone host'}</div>
-                  </div>
-                  <div className="card stat c-cyan">
-                    <div className="k"><MemoryStick size={13} aria-hidden="true" /> Phone RAM</div>
-                    <div className="v">
-                      {ramMb ? <NumberFlow value={ramMb} /> : '—'} <span className="unit">MB</span>
-                    </div>
-                    <div className={`meter${ramPct > 75 ? ' hot' : ''}`} role="img" aria-label={`${ramMb} of 256 MB used`}>
-                      <span style={{ width: `${ramPct}%` }} />
-                    </div>
-                    <div className="meter-note">{ramMb} of 256 MB host cap</div>
-                  </div>
-                  <div className="card stat c-magenta">
-                    <div className="k"><Timer size={13} aria-hidden="true" /> Uptime</div>
-                    <div className="v" style={{ fontSize: 24 }}>{dur(bot.uptimeMs || 0)}</div>
-                    <div className="sub">unbroken session</div>
-                  </div>
-                  <div className="card stat c-amber">
-                    <div className="k"><Activity size={13} aria-hidden="true" /> Gateway ping</div>
-                    <div className="v">
-                      {bot.wsPingMs != null ? <NumberFlow value={bot.wsPingMs} /> : '—'} <span className="unit">ms</span>
-                    </div>
-                    <div className="sub">outbound only</div>
-                  </div>
-                </div>
-
-                {/* Command usage bars */}
-                <div className="card pad ticked">
-                  <div className="sec-head">
-                    <span className="kicker cyan">Telemetry</span>
-                    <h2>Command volume</h2>
-                  </div>
-                  {usage.length === 0 ? (
-                    <div className="empty">No moderation commands logged yet.</div>
-                  ) : (
-                    <div className="tablewrap"><table>
-                      <thead>
-                        <tr>
-                          <th>Command</th>
-                          <th style={{ width: '45%' }}>Activity</th>
-                          <th>Hits</th>
-                          <th>Last used</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {usage.map((u) => (
-                          <tr key={u.name}>
-                            <td className="mono">/{u.name}</td>
-                            <td>
-                              <div className="bar-wrap">
-                                <motion.span
-                                  className="bar"
-                                  initial={{ width: 0 }}
-                                  animate={{ width: `${Math.round((u.count / maxCount) * 100)}%` }}
-                                  transition={{ duration: 0.6, ease: 'easeOut' }}
-                                />
-                              </div>
-                            </td>
-                            <td>
-                              <strong>{u.count}</strong>
-                            </td>
-                            <td className="dim nowrap" suppressHydrationWarning>{ago(u.last_used)}</td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table></div>
-                  )}
-                </div>
-
-                {/* Quick control shortcuts */}
-                <div className="card pad">
-                  <div className="sec-head">
-                    <span className="kicker amber">Shortcuts</span>
-                    <h2>Jump to</h2>
-                  </div>
-                  <div className="jump-row">
-                    <button className="jump" onClick={() => setActiveTab('channels')}>
-                      <Server size={14} aria-hidden="true" /> Channels and roles <ArrowUpRight size={13} aria-hidden="true" />
-                    </button>
-                    <button className="jump" onClick={() => setActiveTab('announcements')}>
-                      <Megaphone size={14} aria-hidden="true" /> New announcement <ArrowUpRight size={13} aria-hidden="true" />
-                    </button>
-                    <button className="jump" onClick={() => setActiveTab('security')}>
-                      <ShieldAlert size={14} aria-hidden="true" /> Raid and security <ArrowUpRight size={13} aria-hidden="true" />
-                    </button>
-                    <button className="jump" onClick={() => setActiveTab('automod')}>
-                      <Bot size={14} aria-hidden="true" /> AutoMod rules <ArrowUpRight size={13} aria-hidden="true" />
-                    </button>
-                  </div>
-                </div>
+              <motion.div key="overview" {...panelFade}>
+                <Overview snapshot={snapshot} connection={connection} onNavigate={setActiveTab} />
               </motion.div>
             )}
 
@@ -1089,5 +1002,6 @@ export default function Board({ initial }) {
         <footer className="dash-foot">{siteConfig.footer}</footer>
       </div>
     </div>
+    </MotionConfig>
   );
 }
