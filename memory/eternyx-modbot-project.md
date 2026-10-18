@@ -248,6 +248,17 @@ Verified live 2026-10-03: #test announcement embed image = uploaded CDN
   carry no arguments. Panels verified live via REST. 42 tests. Gotcha: the
   dashboard results list caps at 50 — dispatch scripts must compare the last
   result id, not the count, or verification false-negatives.
+- **Embed-less panels (2026-10-18, commit 649a289):** user twice asked for
+  buttons "inside the embed" — impossible at the Discord API level (message =
+  embeds[] THEN components[], every bot ever). The maximal-look solution
+  shipped: panels are now **image attachment + components with NO embed** —
+  buttons render directly attached to the kafka banner artwork, reading as
+  one card. Live state rides in a compact content line above the image
+  (panelContent); the ephemeral Status reply still uses panelStatusEmbed.
+  Lockdown refresh edits content+components only (banner attachment kept).
+  Verified via REST: embeds=0, attachment=kafka-panel-*.png, all buttons
+  present. Never promise buttons inside embeds — state the platform limit and
+  offer this pattern instead.
 - **Quick-tunnel rot (2026-10-18):** dashboard "down" = Cloudflare revoked the
   12-day-old quick tunnel (`Unauthorized: Tunnel not found` in tunnel.log while
   web stayed healthy locally). Fix: `sv restart tunnel` + hand out the NEW URL.
