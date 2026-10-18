@@ -222,6 +222,16 @@ Verified live 2026-10-03: #test announcement embed image = uploaded CDN
   Staff cmds: /ticket panel|storage|close (mod-gated); dashboard action
   `post-ticket-panel` for remote setup. 40 tests pass. Panel + storage channel
   verified live via REST.
+- **Ticket 10062 fix + category UI (2026-10-18, commit c439995):** user clicks
+  failed with `DiscordAPIError[10062] Unknown interaction` — the modal-submit
+  path did NOT defer before running several API calls (category + channel
+  create + welcome + audit > Discord's 3s window on the phone). Fix: defer
+  FIRST, then create, then editReply, all wrapped in try/catch. Panel is now
+  multi-category (TicketTool style): 🛠 Support / 🚩 Report / ⚖️ Appeal /
+  💬 Other buttons (`ticket:open:<cat>`) → per-category modal → ticket channel
+  titled by category; success reply carries a **Go to your ticket** link
+  button. Lesson: any interaction doing >1 API call must deferReply before the
+  first await.
 - **Quick-tunnel rot (2026-10-18):** dashboard "down" = Cloudflare revoked the
   12-day-old quick tunnel (`Unauthorized: Tunnel not found` in tunnel.log while
   web stayed healthy locally). Fix: `sv restart tunnel` + hand out the NEW URL.
