@@ -232,6 +232,22 @@ Verified live 2026-10-03: #test announcement embed image = uploaded CDN
   titled by category; success reply carries a **Go to your ticket** link
   button. Lesson: any interaction doing >1 API call must deferReply before the
   first await.
+
+- **Kafka-themed panels (2026-10-18, commit a4042c6):** Discord API cannot put
+  buttons inside embeds (hard limit) — the aesthetic substitute is a
+  programmatically drawn kafka banner (System.Drawing via PowerShell:
+  violet gradient, magenta glow, corner spiderweb, grape cluster, silk thread;
+  assets/kafka-panel-*.png) as the embed image with the button rows styled to
+  match, kafka violet embed color 0x6b21a8. Control deck (#eternyx-control)
+  now carries EVERY stateless command as buttons: Lockdown/Unlock/Status +
+  Test Alert/Invite Shield/Profanity Guard/Mention Guard/Refresh (rows of
+  3+5); deck handlers reuse `executeCommand` (same validated dispatcher as
+  the dashboard) and defer first (10062 lesson). Ticket panel buttons
+  kafka-emojied (🕸 Support / ⚔️ Report / 🍇 Appeal / 💜 Other). Commands
+  needing arguments (ban/kick/timeout) cannot be buttons — Discord buttons
+  carry no arguments. Panels verified live via REST. 42 tests. Gotcha: the
+  dashboard results list caps at 50 — dispatch scripts must compare the last
+  result id, not the count, or verification false-negatives.
 - **Quick-tunnel rot (2026-10-18):** dashboard "down" = Cloudflare revoked the
   12-day-old quick tunnel (`Unauthorized: Tunnel not found` in tunnel.log while
   web stayed healthy locally). Fix: `sv restart tunnel` + hand out the NEW URL.
