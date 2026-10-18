@@ -21,6 +21,8 @@ export const KNOWN_ACTIONS = [
   'test-alert',
   'set-auto-role',
   'post-ticket-panel',
+  'open-ticket',
+  'close-ticket',
   'announce',
   'set-slowmode',
   'lock-channel',
@@ -51,6 +53,12 @@ export function validateCommand({ action, params = {} }) {
     case 'post-panel':
     case 'post-ticket-panel':
       if (!isSnowflake(p.id ?? p.channelId ?? '')) return { ok: false, reason: 'missing/invalid id' };
+      return { ok: true };
+    case 'open-ticket':
+      if (p.userId != null && !isSnowflake(p.userId)) return { ok: false, reason: 'invalid userId' };
+      return { ok: true };
+    case 'close-ticket':
+      if (!isSnowflake(p.channelId ?? '')) return { ok: false, reason: 'missing/invalid channelId' };
       return { ok: true };
     case 'set-raid-threshold': {
       const n = Number(p.joins);
@@ -220,6 +228,22 @@ export async function executeCommand(client, { action, params = {}, createdBy = 
         const { postTicketPanel } = await import('./tickets.js');
         const message = await postTicketPanel(guild, ch);
         return { ok: true, detail: `ticket panel posted in <#${ch.id}> (message ${message.id})` };
+      }
+      case 'open-ticket': {
+        // Ops tooling: open a ticket on behalf of a member (default = master).
+        const userId = params.userId ?? '1479589523426902208';
+        const member = await guild.members.fetch(userId).catch(() => null);
+        if (!member) return { ok: false, detail: 'member not found' };
+        const { createTicket } = await import('./tickets.js');
+        const { channel } = await createTicket(guild, member, `opened via control deck by ${createdBy}`, params.category ?? 'support');
+        return { ok: true, detail: `ticket opened → <#${channel.id}> (${channel.name})` };
+      }
+      case 'close-ticket': {
+        const ch = channelOf(guild, params.channelId);
+        if (!ch) return { ok: false, detail: 'channel not found' };
+        const { closeTicket } = await import('./tickets.js');
+        const result = await closeTicket(guild, ch, client.user, `closed via control deck by ${createdBy}`);
+        return { ok: result.ok, detail: result.detail };
       }
       case 'announce': {
         const ch = channelOf(guild, params.channelId);

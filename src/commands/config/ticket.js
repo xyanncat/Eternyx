@@ -4,8 +4,8 @@
 //   /ticket close [reason]   — close the ticket channel it runs in
 import { ChannelType, PermissionFlagsBits, SlashCommandBuilder, InteractionContextType } from 'discord.js';
 import { buildEmbed, errorEmbed, EPHEMERAL } from '../../lib/embeds.js';
-import { getConfig, setConfig } from '../../storage/db.js';
-import { postTicketPanel, closeTicket } from '../../lib/tickets.js';
+import { getConfig, setConfig, getTicketByChannel } from '../../storage/db.js';
+import { postTicketPanel, closeTicket, claimTicket, snapshotTranscript } from '../../lib/tickets.js';
 
 export const meta = { modOnly: true, cooldown: 5 };
 
@@ -41,6 +41,8 @@ export const data = new SlashCommandBuilder()
       .setDescription('Close the ticket this command runs in')
       .addStringOption((o) => o.setName('reason').setDescription('Closing reason').setMaxLength(512))
   )
+  .addSubcommand((s) => s.setName('claim').setDescription('Claim the ticket this command runs in'))
+  .addSubcommand((s) => s.setName('transcript').setDescription('Archive a transcript snapshot of this ticket (no close)'))
   .setDefaultMemberPermissions(PermissionFlagsBits.ManageGuild)
   .setContexts(InteractionContextType.Guild);
 
@@ -73,6 +75,26 @@ export async function execute(interaction) {
   }
 
   // close
+  if (sub === 'claim') {
+    await interaction.deferReply({ flags: EPHEMERAL });
+    const row = getTicketByChannel(interaction.channel.id);
+    if (!row) {
+      return interaction.editReply({ embeds: [errorEmbed('This channel is not an open ticket.', interaction.user)] });
+    }
+    const result = await claimTicket(guild, interaction.channel, interaction.user, row);
+    return interaction.editReply({ embeds: [buildEmbed({ kind: 'success', title: 'Ticket claimed', description: result.detail, moderator: interaction.user })] });
+  }
+
+  if (sub === 'transcript') {
+    await interaction.deferReply({ flags: EPHEMERAL });
+    const row = getTicketByChannel(interaction.channel.id);
+    if (!row) {
+      return interaction.editReply({ embeds: [errorEmbed('This channel is not an open ticket.', interaction.user)] });
+    }
+    const result = await snapshotTranscript(guild, interaction.channel, interaction.user, row);
+    return interaction.editReply({ embeds: [buildEmbed({ kind: 'success', title: 'Transcript archived', description: result.detail, moderator: interaction.user })] });
+  }
+
   const reason = interaction.options.getString('reason')?.trim() || 'No reason provided';
   await interaction.deferReply({ flags: EPHEMERAL });
   const result = await closeTicket(guild, interaction.channel, interaction.user, reason);

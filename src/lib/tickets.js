@@ -27,10 +27,10 @@ import { writeFile, mkdir } from 'node:fs/promises';
 import { existsSync } from 'node:fs';
 import path from 'node:path';
 import { ROOT } from '../config.js';
-import { getConfig, setConfig, createTicketRow, getTicketByChannel, closeTicketRow, recordEvent } from '../storage/db.js';
+import { createTicketRow, getTicketByChannel, getTicketRow, closeTicketRow, claimTicketRow, setWelcomeMessage, getConfig, setConfig, recordEvent } from '../storage/db.js';
 import { buildEmbed } from './embeds.js';
 import { sendAuditLog } from './audit.js';
-import { applyBrand } from './brand.js';
+import { brandAttachment } from './brand.js';
 import { logger } from './log.js';
 
 const STAFF_PERMS = [
@@ -164,6 +164,52 @@ export async function postTicketPanel(guild, channel) {
   return message;
 }
 
+// Discord channel-name safe: lowercase, alnum + dashes, capped.
+export function ticketChannelName(categoryKey, username) {
+  const cat = (TICKET_CATEGORIES[categoryKey] ? categoryKey : 'other').toLowerCase();
+  const user = String(username ?? 'member')
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+    .slice(0, 60) || 'member';
+  return `${cat}-${user}`.slice(0, 100);
+}
+
+// In-ticket options — the professional set, INSIDE the welcome card.
+export function ticketWelcomeButtons() {
+  return new ActionRowBuilder().addComponents(
+    new ButtonBuilder().setCustomId('ticket:close').setLabel('Close').setEmoji('🔒').setStyle(ButtonStyle.Danger),
+    new ButtonBuilder().setCustomId('ticket:claim').setLabel('Claim').setEmoji('🤝').setStyle(ButtonStyle.Success),
+    new ButtonBuilder().setCustomId('ticket:transcript').setLabel('Transcript').setEmoji('📋').setStyle(ButtonStyle.Secondary)
+  );
+}
+
+// The welcome card: Components V2 — text + banner + buttons in ONE frame.
+export function ticketWelcomeContainer(row) {
+  const cat = TICKET_CATEGORIES[row.category] ?? TICKET_CATEGORIES.other;
+  const claimed = row.claimed_by ? `🤝 **Claimed by:** <@${row.claimed_by}>` : '🤝 Not claimed yet — staff press **Claim**';
+  return new ContainerBuilder()
+    .setAccentColor(cat.color ?? 0x6b21a8)
+    .addTextDisplayComponents(
+      new TextDisplayBuilder().setContent(
+        [
+          `## ${cat.emoji} Ticket #${row.number} — ${cat.label}`,
+          `**Opened by:** <@${row.opener_id}>`,
+          `**Subject:** ${row.subject}`,
+          claimed,
+          '',
+          'Only you and the staff can read this channel. Press **Transcript** to archive a snapshot, or **Close** when it is resolved.',
+        ].join('\n')
+      )
+    )
+    .addSeparatorComponents(new SeparatorBuilder().setDivider(true).setSpacing(SeparatorSpacingSize.Small))
+    .addMediaGalleryComponents(
+      new MediaGalleryBuilder().addItems({ media: { url: 'attachment://kafka.png' }, description: 'Eternyx' })
+    )
+    .addSeparatorComponents(new SeparatorBuilder().setDivider(false).setSpacing(SeparatorSpacingSize.Small))
+    .addActionRowComponents(ticketWelcomeButtons());
+}
+
 export async function createTicket(guild, member, subject, categoryKey = 'other') {
   const cat = TICKET_CATEGORIES[categoryKey] ?? TICKET_CATEGORIES.other;
   const cfg = getConfig(guild.id);
@@ -177,40 +223,36 @@ export async function createTicket(guild, member, subject, categoryKey = 'other'
     ...cfg.modRoleIds.map((roleId) => ({ id: roleId, allow: STAFF_PERMS })),
   ];
 
+  // Channel named after the USER + the ticket TYPE (user request 2026-10-18).
   const channel = await guild.channels.create({
-    name: `ticket-${number}`,
+    name: ticketChannelName(categoryKey, member.user.username),
     type: ChannelType.GuildText,
     parent: category?.id ?? undefined,
     permissionOverwrites: overwrites,
-    topic: `[${cat.label}] ${subject} — by ${member.user.username}`.slice(0, 1024),
+    topic: `[${cat.label}] #${number} ${subject} — by ${member.user.username}`.slice(0, 1024),
     reason: `Eternyx ticket #${number} by ${member.user.username}`,
   });
 
-  const row = createTicketRow({ guildId: guild.id, number, openerId: member.id, channelId: channel.id, subject: `[${cat.label}] ${subject}` });
+  const row = createTicketRow({
+    guildId: guild.id,
+    number,
+    openerId: member.id,
+    channelId: channel.id,
+    subject: `[${cat.label}] ${subject}`,
+    category: categoryKey,
+  });
   setConfig(guild.id, { ticketCounter: number });
   recordEvent('ticket_opened', JSON.stringify({ guild: guild.id, number, opener: member.id, channel: channel.id, category: categoryKey }));
 
-  await channel.send(
-    applyBrand({
-      embeds: [
-        buildEmbed({
-          kind: 'info',
-          title: `${cat.emoji} Ticket #${number} — ${cat.label}`,
-          description: [
-            `**Opened by:** <@${member.id}>`,
-            `**Subject:** ${subject}`,
-            '',
-            'Staff will be with you shortly. Everything said here is archived when the ticket closes.',
-          ].join('\n'),
-        }),
-      ],
-      components: [
-        new ActionRowBuilder().addComponents(
-          new ButtonBuilder().setCustomId('ticket:close').setLabel('Close Ticket').setEmoji('🔒').setStyle(ButtonStyle.Danger)
-        ),
-      ],
-    })
-  );
+  // Welcome card — buttons INSIDE the V2 frame.
+  const brand = brandAttachment();
+  const payload = {
+    components: [ticketWelcomeContainer(row)],
+    flags: MessageFlags.IsComponentsV2,
+  };
+  if (brand) payload.files = [brand];
+  const welcome = await channel.send(payload);
+  setWelcomeMessage(row.id, welcome.id);
 
   const audit = buildEmbed({
     kind: 'action',
@@ -219,6 +261,45 @@ export async function createTicket(guild, member, subject, categoryKey = 'other'
   });
   await sendAuditLog(guild, audit);
   return { channel, row };
+}
+
+export async function claimTicket(guild, channel, claimer, row) {
+  claimTicketRow(row.id, claimer.id);
+  recordEvent('ticket_claimed', JSON.stringify({ guild: guild.id, number: row.number, claimer: claimer.id }));
+  // Refresh the welcome card so the claim is visible to everyone in-channel.
+  if (row.welcome_message_id) {
+    const welcome = await channel.messages.fetch(row.welcome_message_id).catch(() => null);
+    const updated = getTicketByChannel(channel.id);
+    await welcome?.edit({ components: [ticketWelcomeContainer(updated)] }).catch(() => {});
+  }
+  await sendAuditLog(
+    guild,
+    buildEmbed({ kind: 'action', title: `Ticket #${row.number} claimed`, description: `Claimed by **${claimer.username}**`, moderator: claimer })
+  );
+  return { ok: true, detail: `ticket #${row.number} claimed by ${claimer.username}` };
+}
+
+// Archive a transcript snapshot WITHOUT closing the ticket.
+export async function snapshotTranscript(guild, channel, requester, row) {
+  const fetched = await channel.messages.fetch({ limit: 500 }).catch(() => null);
+  const ordered = fetched ? [...fetched.values()].sort((a, b) => a.createdTimestamp - b.createdTimestamp) : [];
+  const cat = TICKET_CATEGORIES[row.category] ?? TICKET_CATEGORIES.other;
+  const header = `ETERNYX TICKET #${row.number} — TRANSCRIPT SNAPSHOT (ticket still open)\nType: ${cat.label}\nSubject: ${row.subject}\nOpened by: ${row.opener_id}\nClaimed by: ${row.claimed_by ?? '—'}\nRequested by: ${requester.username} (${requester.id})\nMessages: ${ordered.length}\n${'='.repeat(60)}\n`;
+  const transcript = header + buildTranscript(ordered);
+  const storage = await ensureStorageChannel(guild);
+  const file = new AttachmentBuilder(Buffer.from(transcript, 'utf8'), { name: `ticket-${row.number}-snapshot.txt` });
+  await storage.send({
+    embeds: [
+      buildEmbed({
+        kind: 'info',
+        title: `📋 Ticket #${row.number} transcript snapshot`,
+        description: `Requested by **${requester.username}** · ${ordered.length} messages · ticket still open.`,
+      }),
+    ],
+    files: [file],
+  }).catch((err) => logger.warn(`ticket snapshot send failed: ${err.message}`));
+  recordEvent('ticket_transcript', JSON.stringify({ guild: guild.id, number: row.number, by: requester.id }));
+  return { ok: true, detail: `snapshot archived (${ordered.length} messages)` };
 }
 
 export function buildTranscript(messages) {
@@ -238,7 +319,7 @@ export async function closeTicket(guild, channel, closer, reason = 'No reason pr
   // Chat-by-chat transcript: Discord archive + device-storage copy.
   const fetched = await channel.messages.fetch({ limit: 500 }).catch(() => null);
   const ordered = fetched ? [...fetched.values()].sort((a, b) => a.createdTimestamp - b.createdTimestamp) : [];
-  const header = `ETERNYX TICKET #${row.number} TRANSCRIPT\nSubject: ${row.subject}\nOpened by: ${row.opener_id}\nOpened at: ${new Date(row.created_at).toISOString()}\nClosed by: ${closer.username} (${closer.id})\nReason: ${reason}\nMessages: ${ordered.length}\n${'='.repeat(60)}\n`;
+  const header = `ETERNYX TICKET #${row.number} TRANSCRIPT\nType: ${(TICKET_CATEGORIES[row.category] ?? TICKET_CATEGORIES.other).label}\nSubject: ${row.subject}\nOpened by: ${row.opener_id}\nClaimed by: ${row.claimed_by ?? '—'}\nOpened at: ${new Date(row.created_at).toISOString()}\nClosed by: ${closer.username} (${closer.id})\nReason: ${reason}\nMessages: ${ordered.length}\n${'='.repeat(60)}\n`;
   const transcript = header + buildTranscript(ordered);
 
   // Device storage (phone disk) copy.

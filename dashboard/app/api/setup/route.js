@@ -19,6 +19,8 @@ const KNOWN_ACTIONS = new Set([
   'test-alert',
   'set-auto-role',
   'post-ticket-panel',
+  'open-ticket',
+  'close-ticket',
   'announce',
   'set-slowmode',
   'lock-channel',

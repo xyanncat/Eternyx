@@ -94,7 +94,8 @@ function migrate() {
   }
 }
 
-// The tickets table landed after deployments existed; create it for those.
+// The tickets table landed after deployments existed; create it for those,
+// then add columns introduced later (claims, category, welcome card id).
 function migrateTickets() {
   const has = db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='tickets'").get();
   if (!has) {
@@ -105,11 +106,22 @@ function migrateTickets() {
       opener_id TEXT NOT NULL,
       channel_id TEXT NOT NULL,
       subject TEXT NOT NULL DEFAULT '',
+      category TEXT NOT NULL DEFAULT 'other',
+      claimed_by TEXT,
+      welcome_message_id TEXT,
       status TEXT NOT NULL DEFAULT 'OPEN',
       created_at INTEGER NOT NULL,
       closed_at INTEGER
     )`).run();
     db.prepare('CREATE INDEX IF NOT EXISTS idx_tickets_channel ON tickets(channel_id)').run();
+  }
+  const cols = new Set(db.prepare('PRAGMA table_info(tickets)').all().map((r) => r.name));
+  for (const [name, type] of [
+    ['category', "TEXT NOT NULL DEFAULT 'other'"],
+    ['claimed_by', 'TEXT'],
+    ['welcome_message_id', 'TEXT'],
+  ]) {
+    if (!cols.has(name)) db.prepare(`ALTER TABLE tickets ADD COLUMN ${name} ${type}`).run();
   }
 }
 
@@ -253,16 +265,24 @@ export function setConfig(guildId, patch) {
 
 /* ---------- tickets ---------- */
 
-export function createTicketRow({ guildId, number, openerId, channelId, subject }) {
+export function createTicketRow({ guildId, number, openerId, channelId, subject, category = 'other' }) {
   const { lastInsertRowid } = db
-    .prepare(`INSERT INTO tickets (guild_id, number, opener_id, channel_id, subject, status, created_at)
-       VALUES (?, ?, ?, ?, ?, 'OPEN', ?)`)
-    .run(guildId, number, openerId, channelId, subject, Date.now());
+    .prepare(`INSERT INTO tickets (guild_id, number, opener_id, channel_id, subject, category, status, created_at)
+       VALUES (?, ?, ?, ?, ?, ?, 'OPEN', ?)`)
+    .run(guildId, number, openerId, channelId, subject, category, Date.now());
   return getTicketRow(lastInsertRowid);
 }
 
 export function getTicketRow(id) {
   return db.prepare('SELECT * FROM tickets WHERE id = ?').get(id) ?? null;
+}
+
+export function claimTicketRow(id, claimedBy) {
+  db.prepare("UPDATE tickets SET claimed_by = ? WHERE id = ? AND status = 'OPEN'").run(claimedBy, id);
+}
+
+export function setWelcomeMessage(id, messageId) {
+  db.prepare('UPDATE tickets SET welcome_message_id = ? WHERE id = ?').run(messageId, id);
 }
 
 export function getTicketByChannel(channelId) {

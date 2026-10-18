@@ -10,7 +10,7 @@ import { isMod, isOwner } from '../lib/perms.js';
 import { getConfig } from '../storage/db.js';
 import { logger } from '../lib/log.js';
 import { applyBrand } from '../lib/brand.js';
-import { ticketSubjectModal, createTicket, closeTicket } from '../lib/tickets.js';
+import { ticketSubjectModal, createTicket, closeTicket, claimTicket, snapshotTranscript } from '../lib/tickets.js';
 import { getTicketByChannel } from '../storage/db.js';
 
 export const name = Events.InteractionCreate;
@@ -149,6 +149,31 @@ async function handleTicketButton(interaction, cfg, action, arg) {
     }
     // Channel is deleted on success; nothing left to edit.
     return;
+  }
+  if (action === 'claim') {
+    if (!isMod(interaction.member, cfg)) {
+      return interaction.reply({ embeds: [errorEmbed('Only staff can claim a ticket.', interaction.user)], flags: EPHEMERAL });
+    }
+    const row = getTicketByChannel(interaction.channel.id);
+    if (!row) {
+      return interaction.reply({ embeds: [errorEmbed('This channel is not an open ticket.', interaction.user)], flags: EPHEMERAL });
+    }
+    await interaction.deferReply({ flags: EPHEMERAL });
+    const result = await claimTicket(guild, interaction.channel, interaction.user, row);
+    return interaction.editReply({ embeds: [buildEmbed({ kind: 'success', title: 'Ticket claimed', description: result.detail, moderator: interaction.user })] });
+  }
+  if (action === 'transcript') {
+    const row = getTicketByChannel(interaction.channel.id);
+    if (!row) {
+      return interaction.reply({ embeds: [errorEmbed('This channel is not an open ticket.', interaction.user)], flags: EPHEMERAL });
+    }
+    const isStaff = isMod(interaction.member, cfg) || row.opener_id === interaction.user.id;
+    if (!isStaff) {
+      return interaction.reply({ embeds: [errorEmbed('Only the ticket opener or staff can request a transcript.', interaction.user)], flags: EPHEMERAL });
+    }
+    await interaction.deferReply({ flags: EPHEMERAL });
+    const result = await snapshotTranscript(guild, interaction.channel, interaction.user, row);
+    return interaction.editReply({ embeds: [buildEmbed({ kind: 'success', title: 'Transcript archived', description: result.detail, moderator: interaction.user })] });
   }
 }
 
