@@ -6,12 +6,22 @@
 //   panel:lockdown:on   owner-only — activate lockdown
 //   panel:lockdown:off  owner-only — lift lockdown (exact restore)
 //   panel:status        mod+       — fresh protection status, ephemeral
-import { ActionRowBuilder, ButtonBuilder, ButtonStyle, AttachmentBuilder } from 'discord.js';
+import {
+  ActionRowBuilder,
+  ButtonBuilder,
+  ButtonStyle,
+  AttachmentBuilder,
+  ContainerBuilder,
+  TextDisplayBuilder,
+  SeparatorBuilder,
+  SeparatorSpacingSize,
+  MediaGalleryBuilder,
+  MessageFlags,
+} from 'discord.js';
 import { existsSync } from 'node:fs';
 import path from 'node:path';
 import { getConfig, setConfig } from '../storage/db.js';
 import { buildEmbed } from './embeds.js';
-import { applyBrand } from './brand.js';
 import { logger } from './log.js';
 import { ROOT } from '../config.js';
 
@@ -100,6 +110,21 @@ export function panelContent(state) {
   return `🕸 **ETERNYX CONTROL DECK** — ${lock} · raid guard ${state.raidThreshold}/min · automod ${state.automodEnabled} on · nuke auto-action ${state.nukeAutoAction ? 'on' : 'off'}`;
 }
 
+// Components V2 card: ONE frame containing text, the banner art, and the
+// buttons — the buttons render INSIDE the card (what classic embeds can
+// never do). Kafka violet accent bar.
+export function panelContainer(state) {
+  return new ContainerBuilder()
+    .setAccentColor(KAFKA_COLOR)
+    .addTextDisplayComponents(new TextDisplayBuilder().setContent(panelContent(state)))
+    .addSeparatorComponents(new SeparatorBuilder().setDivider(true).setSpacing(SeparatorSpacingSize.Small))
+    .addMediaGalleryComponents(
+      new MediaGalleryBuilder().addItems({ media: { url: 'attachment://kafka-panel-control.png' }, description: 'Eternyx control deck' })
+    )
+    .addSeparatorComponents(new SeparatorBuilder().setDivider(false).setSpacing(SeparatorSpacingSize.Small))
+    .addActionRowComponents(...panelButtons());
+}
+
 // Post a fresh panel message; if an old panel is known, delete it first so the
 // channel never accumulates stale panels.
 export async function postPanel(guild, channel) {
@@ -112,8 +137,8 @@ export async function postPanel(guild, channel) {
   const state = await panelState(guild);
   const art = banner('kafka-panel-control.png');
   const payload = {
-    content: panelContent(state),
-    components: panelButtons(),
+    components: [panelContainer(state)],
+    flags: MessageFlags.IsComponentsV2,
   };
   if (art) payload.files = [art];
   const message = await channel.send(payload);

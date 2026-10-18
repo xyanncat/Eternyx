@@ -16,6 +16,12 @@ import {
   TextInputBuilder,
   TextInputStyle,
   ModalBuilder,
+  ContainerBuilder,
+  TextDisplayBuilder,
+  SeparatorBuilder,
+  SeparatorSpacingSize,
+  MediaGalleryBuilder,
+  MessageFlags,
 } from 'discord.js';
 import { writeFile, mkdir } from 'node:fs/promises';
 import { existsSync } from 'node:fs';
@@ -126,8 +132,7 @@ async function ensureStorageChannel(guild) {
 }
 
 // Post (or refresh) the ticket panel in the configured channel.
-// Image + buttons, no embed between them — buttons render attached to the
-// artwork (the closest Discord allows to "inside the embed").
+// Components V2: the category buttons live INSIDE the kafka card, one frame.
 export async function postTicketPanel(guild, channel) {
   const cfg = getConfig(guild.id);
   if (cfg.ticketPanelChannelId && cfg.ticketPanelMessageId) {
@@ -137,9 +142,20 @@ export async function postTicketPanel(guild, channel) {
   }
   await ensureStorageChannel(guild); // bootstraps the archive target on first setup
   const art = ticketPanelArt();
+  const container = new ContainerBuilder()
+    .setAccentColor(0x6b21a8)
+    .addTextDisplayComponents(
+      new TextDisplayBuilder().setContent('🕸 **Need the staff?** Pick a category — a private ticket opens just for you.')
+    )
+    .addSeparatorComponents(new SeparatorBuilder().setDivider(true).setSpacing(SeparatorSpacingSize.Small))
+    .addMediaGalleryComponents(
+      new MediaGalleryBuilder().addItems({ media: { url: 'attachment://kafka-panel-tickets.png' }, description: 'Eternyx tickets' })
+    )
+    .addSeparatorComponents(new SeparatorBuilder().setDivider(false).setSpacing(SeparatorSpacingSize.Small))
+    .addActionRowComponents(ticketPanelButtons());
   const payload = {
-    content: '🕸 **Need the staff?** Pick a category — a private ticket opens just for you.',
-    components: [ticketPanelButtons()],
+    components: [container],
+    flags: MessageFlags.IsComponentsV2,
   };
   if (art) payload.files = [art];
   const message = await channel.send(payload);

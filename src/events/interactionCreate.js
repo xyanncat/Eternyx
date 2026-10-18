@@ -73,11 +73,13 @@ async function handleButton(interaction, cfg) {
     if (!result.ok) {
       await interaction.followUp({ embeds: [embed], flags: EPHEMERAL }).catch(() => {});
     }
-    // Refresh the panel message with the new state (content line + buttons;
-    // the banner attachment stays untouched on edit).
-    const { panelState, panelContent, panelButtons } = await import('../lib/panel.js');
+    // Refresh the panel card with the new state (Components V2 rebuild).
+    const { panelState, panelContainer } = await import('../lib/panel.js');
+    const { MessageFlags } = await import('discord.js');
     const state = await panelState(guild);
-    await interaction.editReply({ content: panelContent(state), components: panelButtons() }).catch(() => {});
+    await interaction
+      .editReply({ components: [panelContainer(state)], flags: MessageFlags.IsComponentsV2 })
+      .catch(() => {});
     return;
   }
 
