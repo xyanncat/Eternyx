@@ -248,7 +248,21 @@ Verified live 2026-10-03: #test announcement embed image = uploaded CDN
   carry no arguments. Panels verified live via REST. 42 tests. Gotcha: the
   dashboard results list caps at 50 — dispatch scripts must compare the last
   result id, not the count, or verification false-negatives.
-- **Embed-less panels (2026-10-18, commit 649a289):** user twice asked for
+- **Components V2 (2026-10-18, commit 7a70ec8) — THE REAL ANSWER to "buttons
+  inside the embed":** Discord's 2025 Components V2 API allows a **Container
+  (type 17)** — one card frame with accent bar containing TextDisplay(10) +
+  Separator(14) + MediaGallery(12, the kafka banner via attachment://) +
+  **ActionRows(1) with the buttons INSIDE the frame**. Both panels now send
+  `{ components: [ContainerBuilder...], flags: MessageFlags.IsComponentsV2 }`
+  (32768). V2 messages cannot carry content/embeds. Builder API (discord.js
+  14.27): ContainerBuilder.setAccentColor().addTextDisplayComponents()/
+  addSeparatorComponents()/addMediaGalleryComponents()/addActionRowComponents();
+  MediaGalleryBuilder().addItems({media:{url}}). Lockdown refresh must
+  editReply with a REBUILT container + the V2 flag again. My earlier
+  "buttons can't be inside embeds" claim was true only for CLASSIC embeds —
+  V2 containers exist precisely for this; when a user asks for it, use V2.
+  Verified live: flags V2=true, top-level container type 17, accent 6b21a8,
+  both button rows inside (deck 3+5, tickets 4).
   buttons "inside the embed" — impossible at the Discord API level (message =
   embeds[] THEN components[], every bot ever). The maximal-look solution
   shipped: panels are now **image attachment + components with NO embed** —
