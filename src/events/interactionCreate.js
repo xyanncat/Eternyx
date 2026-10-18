@@ -46,9 +46,9 @@ async function handleButton(interaction, cfg) {
       return interaction.reply({ embeds: [errorEmbed('Moderators only.', interaction.user)], flags: EPHEMERAL });
     }
     await interaction.deferReply({ flags: EPHEMERAL });
-    const { panelState, panelEmbed } = await import('../lib/panel.js');
+    const { panelState, panelStatusEmbed } = await import('../lib/panel.js');
     const state = await panelState(guild);
-    return interaction.editReply({ embeds: [panelEmbed(guild, state).embed] });
+    return interaction.editReply({ embeds: [panelStatusEmbed(state)] });
   }
 
   if (action === 'lockdown') {
@@ -73,10 +73,11 @@ async function handleButton(interaction, cfg) {
     if (!result.ok) {
       await interaction.followUp({ embeds: [embed], flags: EPHEMERAL }).catch(() => {});
     }
-    // Refresh the panel message with the new state.
-    const { panelState, panelEmbed, panelButtons } = await import('../lib/panel.js');
+    // Refresh the panel message with the new state (content line + buttons;
+    // the banner attachment stays untouched on edit).
+    const { panelState, panelContent, panelButtons } = await import('../lib/panel.js');
     const state = await panelState(guild);
-    await interaction.editReply({ embeds: [panelEmbed(guild, state).embed], components: panelButtons() }).catch(() => {});
+    await interaction.editReply({ content: panelContent(state), components: panelButtons() }).catch(() => {});
     return;
   }
 

@@ -126,6 +126,8 @@ async function ensureStorageChannel(guild) {
 }
 
 // Post (or refresh) the ticket panel in the configured channel.
+// Image + buttons, no embed between them — buttons render attached to the
+// artwork (the closest Discord allows to "inside the embed").
 export async function postTicketPanel(guild, channel) {
   const cfg = getConfig(guild.id);
   if (cfg.ticketPanelChannelId && cfg.ticketPanelMessageId) {
@@ -134,10 +136,11 @@ export async function postTicketPanel(guild, channel) {
     await old?.delete().catch(() => {});
   }
   await ensureStorageChannel(guild); // bootstraps the archive target on first setup
-  const embed = ticketPanelEmbed();
   const art = ticketPanelArt();
-  if (art) embed.setImage('attachment://kafka-panel-tickets.png');
-  const payload = { embeds: [embed], components: [ticketPanelButtons()] };
+  const payload = {
+    content: '🕸 **Need the staff?** Pick a category — a private ticket opens just for you.',
+    components: [ticketPanelButtons()],
+  };
   if (art) payload.files = [art];
   const message = await channel.send(payload);
   setConfig(guild.id, { ticketPanelChannelId: channel.id, ticketPanelMessageId: message.id });

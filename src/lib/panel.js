@@ -69,20 +69,14 @@ export async function panelState(guild) {
   };
 }
 
-export function panelEmbed(guild, state) {
+export function panelStatusEmbed(state) {
   const lock = state.lockdownActive;
   const embed = buildEmbed({
     kind: lock ? 'error' : 'info',
-    title: lock ? '🚨 Control deck — LOCKDOWN ACTIVE' : '🕸 Eternyx control deck',
-    description: lock
-      ? 'All public channels are locked. Everyone can still read; nobody below staff can write. Press **Unlock** to restore the previous channel permissions.'
-      : 'Every guard, one deck. Each button is a command — every action is logged.',
+    title: lock ? '🚨 Control deck — LOCKDOWN ACTIVE' : '🕸 Control deck status',
+    description: 'Live snapshot of every guard.',
     fields: [
-      {
-        name: 'Lockdown',
-        value: lock ? '🔒 ACTIVE — press Unlock to lift' : '🔓 off',
-        inline: true,
-      },
+      { name: 'Lockdown', value: lock ? '🔒 ACTIVE — press Unlock to lift' : '🔓 off', inline: true },
       { name: 'Raid guard', value: `trigger at ${state.raidThreshold} joins/min`, inline: true },
       { name: 'Nuke auto-action', value: yesNo(state.nukeAutoAction) + (state.nukeAutoAction ? ' auto-timeout on mass bans' : ' alert only'), inline: true },
       { name: 'Verification level', value: String(state.verificationLevel), inline: true },
@@ -93,9 +87,17 @@ export function panelEmbed(guild, state) {
     ],
   });
   embed.setColor(KAFKA_COLOR);
-  const art = banner('kafka-panel-control.png');
-  if (art) embed.setImage('attachment://kafka-panel-control.png');
-  return { embed, art };
+  return embed;
+}
+
+// The panel message itself is IMAGE + BUTTONS with no embed in between —
+// Discord always renders buttons outside embeds, so dropping the embed puts
+// the buttons directly attached to the artwork (the closest possible
+// "buttons inside the panel" look). Live state rides in a compact content
+// line above the image instead.
+export function panelContent(state) {
+  const lock = state.lockdownActive ? '🔒 lockdown ACTIVE' : '🔓 lockdown off';
+  return `🕸 **ETERNYX CONTROL DECK** — ${lock} · raid guard ${state.raidThreshold}/min · automod ${state.automodEnabled} on · nuke auto-action ${state.nukeAutoAction ? 'on' : 'off'}`;
 }
 
 // Post a fresh panel message; if an old panel is known, delete it first so the
@@ -108,10 +110,11 @@ export async function postPanel(guild, channel) {
     await old?.delete().catch(() => {});
   }
   const state = await panelState(guild);
-  const { embed, art } = panelEmbed(guild, state);
-  // The banner IS the brand image for the panel — build the payload manually
-  // so applyBrand doesn't double-attach kafka.png (it respects existing image).
-  const payload = { embeds: [embed], components: panelButtons() };
+  const art = banner('kafka-panel-control.png');
+  const payload = {
+    content: panelContent(state),
+    components: panelButtons(),
+  };
   if (art) payload.files = [art];
   const message = await channel.send(payload);
   setConfig(guild.id, { controlPanelChannelId: channel.id, controlPanelMessageId: message.id });
