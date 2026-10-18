@@ -34,9 +34,20 @@ const STAFF_PERMS = [
   PermissionFlagsBits.EmbedLinks,
 ];
 
+// Ticket categories — each becomes a panel button + modal + channel prefix.
+export const TICKET_CATEGORIES = {
+  support: { label: 'Support', emoji: '🛠', style: ButtonStyle.Primary, color: 0x5865f2, blurb: 'General help, questions, or something broken.' },
+  report: { label: 'Report', emoji: '🚩', style: ButtonStyle.Danger, color: 0xe74c3c, blurb: 'Report a member breaking the pirate code.' },
+  appeal: { label: 'Appeal', emoji: '⚖️', style: ButtonStyle.Success, color: 0x2ecc71, blurb: 'Appeal a punishment you received.' },
+  other: { label: 'Other', emoji: '💬', style: ButtonStyle.Secondary, color: 0x95a5a6, blurb: 'Anything else — staff will route it.' },
+};
+
 export function ticketPanelButtons() {
   return new ActionRowBuilder().addComponents(
-    new ButtonBuilder().setCustomId('ticket:open').setLabel('Open a Ticket').setEmoji('🎫').setStyle(ButtonStyle.Primary)
+    ...Object.entries(TICKET_CATEGORIES).map(
+      ([key, c]) =>
+        new ButtonBuilder().setCustomId(`ticket:open:${key}`).setLabel(c.label).setEmoji(c.emoji).setStyle(c.style)
+    )
   );
 }
 
@@ -44,25 +55,26 @@ export function ticketPanelEmbed() {
   return buildEmbed({
     kind: 'info',
     title: '🎫 Support Tickets',
-    description: [
-      '**Need help from the staff? Open a private ticket.**',
-      '',
-      '› Press **Open a Ticket** below',
-      '› Describe what you need — only you and the staff can read it',
-      '› When it is resolved, staff closes it and the full chat is archived to ticket storage',
-    ].join('\n'),
+    description: '**Need the staff? Pick a category and a private ticket opens for you.**',
+    fields: Object.entries(TICKET_CATEGORIES).map(([key, c]) => ({
+      name: `${c.emoji} ${c.label}`,
+      value: c.blurb,
+      inline: true,
+    })),
   });
 }
 
-export function ticketSubjectModal() {
+export function ticketSubjectModal(categoryKey) {
+  const cat = TICKET_CATEGORIES[categoryKey] ?? TICKET_CATEGORIES.other;
   const input = new TextInputBuilder()
     .setCustomId('subject')
-    .setLabel('What do you need help with?')
+    .setLabel(`${cat.label} — describe your issue`)
+    .setPlaceholder(`What ${cat.label.toLowerCase()} do you need?`)
     .setStyle(TextInputStyle.Short)
     .setMinLength(3)
     .setMaxLength(200)
     .setRequired(true);
-  return new ModalBuilder().setCustomId('ticket:subject').setTitle('Open a Ticket').addComponents(
+  return new ModalBuilder().setCustomId(`ticket:subject:${categoryKey}`).setTitle(`${cat.emoji} ${cat.label} Ticket`).addComponents(
     new ActionRowBuilder().addComponents(input)
   );
 }
@@ -119,7 +131,8 @@ export async function postTicketPanel(guild, channel) {
   return message;
 }
 
-export async function createTicket(guild, member, subject) {
+export async function createTicket(guild, member, subject, categoryKey = 'other') {
+  const cat = TICKET_CATEGORIES[categoryKey] ?? TICKET_CATEGORIES.other;
   const cfg = getConfig(guild.id);
   const number = (cfg.ticketCounter ?? 0) + 1;
   const category = await ensureCategory(guild);
@@ -136,20 +149,20 @@ export async function createTicket(guild, member, subject) {
     type: ChannelType.GuildText,
     parent: category?.id ?? undefined,
     permissionOverwrites: overwrites,
-    topic: `Ticket #${number} — ${subject} (by ${member.user.username})`.slice(0, 1024),
+    topic: `[${cat.label}] ${subject} — by ${member.user.username}`.slice(0, 1024),
     reason: `Eternyx ticket #${number} by ${member.user.username}`,
   });
 
-  const row = createTicketRow({ guildId: guild.id, number, openerId: member.id, channelId: channel.id, subject });
+  const row = createTicketRow({ guildId: guild.id, number, openerId: member.id, channelId: channel.id, subject: `[${cat.label}] ${subject}` });
   setConfig(guild.id, { ticketCounter: number });
-  recordEvent('ticket_opened', JSON.stringify({ guild: guild.id, number, opener: member.id, channel: channel.id }));
+  recordEvent('ticket_opened', JSON.stringify({ guild: guild.id, number, opener: member.id, channel: channel.id, category: categoryKey }));
 
   await channel.send(
     applyBrand({
       embeds: [
         buildEmbed({
           kind: 'info',
-          title: `🎫 Ticket #${number}`,
+          title: `${cat.emoji} Ticket #${number} — ${cat.label}`,
           description: [
             `**Opened by:** <@${member.id}>`,
             `**Subject:** ${subject}`,
@@ -168,7 +181,7 @@ export async function createTicket(guild, member, subject) {
 
   const audit = buildEmbed({
     kind: 'action',
-    title: `Ticket #${number} opened`,
+    title: `Ticket #${number} opened (${cat.label})`,
     description: `<@${member.id}> opened ticket #${number} — **${subject}** → <#${channel.id}>`,
   });
   await sendAuditLog(guild, audit);

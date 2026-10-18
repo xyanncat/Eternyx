@@ -3,12 +3,15 @@
 // re-checks every interaction so in-server permission edits are honored
 // immediately. Panel buttons are authorized here too (owner/mod re-check).
 import { Events } from 'discord.js';
+import { ActionRowBuilder, ButtonBuilder, ButtonStyle } from 'discord.js';
 import { errorEmbed, buildEmbed, EPHEMERAL } from '../lib/embeds.js';
 import { checkCooldown } from '../lib/cooldowns.js';
 import { isMod, isOwner } from '../lib/perms.js';
 import { getConfig } from '../storage/db.js';
 import { logger } from '../lib/log.js';
 import { applyBrand } from '../lib/brand.js';
+import { ticketSubjectModal, createTicket, closeTicket } from '../lib/tickets.js';
+import { getTicketByChannel } from '../storage/db.js';
 
 export const name = Events.InteractionCreate;
 
@@ -77,9 +80,9 @@ async function handleButton(interaction, cfg) {
   }
 }
 
-// Ticket flow: panel button -> subject modal -> private channel; in-channel
-// close button -> transcript archive + channel delete (staff or opener only).
-async function handleTicketButton(interaction, cfg, action) {
+// Ticket flow: panel button (per-category) -> subject modal -> private channel;
+// in-channel close button -> transcript archive + channel delete (staff/opener).
+async function handleTicketButton(interaction, cfg, action, arg) {
   const guild = interaction.guild;
   if (action === 'open') {
     const wait = checkCooldown(`${interaction.user.id}:ticket:open`, 10);
@@ -89,11 +92,10 @@ async function handleTicketButton(interaction, cfg, action) {
         flags: EPHEMERAL,
       });
     }
-    const { ticketSubjectModal } = await import('../lib/tickets.js');
-    return interaction.showModal(ticketSubjectModal());
+    return interaction.showModal(ticketSubjectModal(arg ?? 'other'));
   }
   if (action === 'close') {
-    const row = (await import('../storage/db.js')).getTicketByChannel(interaction.channel.id);
+    const row = getTicketByChannel(interaction.channel.id);
     if (!row) {
       return interaction.reply({ embeds: [errorEmbed('This channel is not an open ticket.', interaction.user)], flags: EPHEMERAL });
     }
@@ -102,7 +104,6 @@ async function handleTicketButton(interaction, cfg, action) {
       return interaction.reply({ embeds: [errorEmbed('Only the ticket opener or staff can close this ticket.', interaction.user)], flags: EPHEMERAL });
     }
     await interaction.deferReply({ flags: EPHEMERAL });
-    const { closeTicket } = await import('../lib/tickets.js');
     const result = await closeTicket(guild, interaction.channel, interaction.user, 'closed via ticket button');
     if (!result.ok) {
       return interaction.editReply({ embeds: [errorEmbed(result.detail, interaction.user)] });
@@ -114,14 +115,28 @@ async function handleTicketButton(interaction, cfg, action) {
 
 export async function execute(interaction) {
   brandInteraction(interaction);
-  if (interaction.isModalSubmit() && interaction.customId === 'ticket:subject') {
+  if (interaction.isModalSubmit() && interaction.customId.startsWith('ticket:subject')) {
+    const categoryKey = interaction.customId.split(':')[2] ?? 'other';
     const subject = interaction.fields.getTextInputValue('subject').trim().slice(0, 200);
-    const { createTicket } = await import('../lib/tickets.js');
-    const { channel } = await createTicket(interaction.guild, interaction.member, subject);
-    return interaction.reply({
-      embeds: [buildEmbed({ kind: 'success', title: 'Ticket created', description: `Your ticket is ready: <#${channel.id}>`, moderator: interaction.user })],
-      flags: EPHEMERAL,
-    });
+    // DEFER FIRST (the 10062 bug): channel creation + welcome + audit can
+    // exceed Discord's 3s interaction window on the phone — acknowledge
+    // immediately, then take as long as needed.
+    await interaction.deferReply({ flags: EPHEMERAL });
+    try {
+      const { channel } = await createTicket(interaction.guild, interaction.member, subject, categoryKey);
+      const row = new ActionRowBuilder().addComponents(
+        new ButtonBuilder().setURL(channel.url).setLabel('Go to your ticket').setStyle(ButtonStyle.Link)
+      );
+      return await interaction.editReply({
+        embeds: [buildEmbed({ kind: 'success', title: 'Ticket created', description: `Your private ticket is ready — only you and staff can see it.`, moderator: interaction.user })],
+        components: [row],
+      });
+    } catch (err) {
+      logger.error(`ticket create failed: ${err?.stack ?? err}`);
+      return await interaction.editReply({
+        embeds: [errorEmbed(`Could not create the ticket (${err.message}). It has been logged.`, interaction.user)],
+      });
+    }
   }
   if (interaction.isButton()) {
     const cfg = getConfig(interaction.guildId);
