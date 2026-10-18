@@ -263,6 +263,25 @@ Verified live 2026-10-03: #test announcement embed image = uploaded CDN
   V2 containers exist precisely for this; when a user asks for it, use V2.
   Verified live: flags V2=true, top-level container type 17, accent 6b21a8,
   both button rows inside (deck 3+5, tickets 4).
+
+- **Ticket system v2 (2026-10-18, commit 3d65f31) — e2e-verified live:**
+  channels named **user + type** (`support-cattrix-ez`, sanitized ≤100);
+  tickets table gained category/claimed_by/welcome_message_id (additive
+  migration); the in-ticket welcome is now a **V2 container** with kafka art
+  and ALL options INSIDE: 🔒 Close · 🤝 Claim · 📋 Transcript. Claim =
+  staff-only, sets claimed_by + edits the welcome card in place (V2 edit:
+  message.edit({components:[rebuilt container]}) — no flags needed on edit).
+  Transcript = snapshot archive without closing (opener/staff). New /ticket
+  claim + transcript subcommands; new dashboard actions `open-ticket` (userId
+  optional, default master — real ops tool, used for e2e) and `close-ticket`
+  (channelId). E2E PROOF: opened ticket #7 → channel `support-cattrix-ez`,
+  welcome V2=17/6b21a8 with [text,divider,gallery,spacer,1 row of 3 buttons
+  INSIDE], closed → `ticket-7-transcript.txt` in #ticket-storage + disk copy
+  `data/tickets/ticket-7.txt` with Type/Subject/Claimed-by header. 44 tests.
+  Gotchas: results array is OLDEST-FIRST — newest result is `.at(-1)`, and
+  poll by result.action name not id; `brandAttachment` lives in brand.js (its
+  missing import = runtime 'not defined' in a queued cmd — check imports
+  ship-early).
   buttons "inside the embed" — impossible at the Discord API level (message =
   embeds[] THEN components[], every bot ever). The maximal-look solution
   shipped: panels are now **image attachment + components with NO embed** —
