@@ -24,6 +24,7 @@ function brandInteraction(interaction) {
 
 async function handleButton(interaction, cfg) {
   const [ns, action, arg] = interaction.customId.split(':');
+  if (ns === 'ticket') return handleTicketButton(interaction, cfg, action, arg);
   if (ns !== 'panel') return;
 
   const wait = checkCooldown(`${interaction.user.id}:panel:${action}`, 5);
@@ -76,8 +77,52 @@ async function handleButton(interaction, cfg) {
   }
 }
 
+// Ticket flow: panel button -> subject modal -> private channel; in-channel
+// close button -> transcript archive + channel delete (staff or opener only).
+async function handleTicketButton(interaction, cfg, action) {
+  const guild = interaction.guild;
+  if (action === 'open') {
+    const wait = checkCooldown(`${interaction.user.id}:ticket:open`, 10);
+    if (wait > 0) {
+      return interaction.reply({
+        embeds: [errorEmbed(`Slow down — try again in ${Math.ceil(wait)}s.`, interaction.user)],
+        flags: EPHEMERAL,
+      });
+    }
+    const { ticketSubjectModal } = await import('../lib/tickets.js');
+    return interaction.showModal(ticketSubjectModal());
+  }
+  if (action === 'close') {
+    const row = (await import('../storage/db.js')).getTicketByChannel(interaction.channel.id);
+    if (!row) {
+      return interaction.reply({ embeds: [errorEmbed('This channel is not an open ticket.', interaction.user)], flags: EPHEMERAL });
+    }
+    const isStaff = isMod(interaction.member, cfg) || row.opener_id === interaction.user.id;
+    if (!isStaff) {
+      return interaction.reply({ embeds: [errorEmbed('Only the ticket opener or staff can close this ticket.', interaction.user)], flags: EPHEMERAL });
+    }
+    await interaction.deferReply({ flags: EPHEMERAL });
+    const { closeTicket } = await import('../lib/tickets.js');
+    const result = await closeTicket(guild, interaction.channel, interaction.user, 'closed via ticket button');
+    if (!result.ok) {
+      return interaction.editReply({ embeds: [errorEmbed(result.detail, interaction.user)] });
+    }
+    // Channel is deleted on success; nothing left to edit.
+    return;
+  }
+}
+
 export async function execute(interaction) {
   brandInteraction(interaction);
+  if (interaction.isModalSubmit() && interaction.customId === 'ticket:subject') {
+    const subject = interaction.fields.getTextInputValue('subject').trim().slice(0, 200);
+    const { createTicket } = await import('../lib/tickets.js');
+    const { channel } = await createTicket(interaction.guild, interaction.member, subject);
+    return interaction.reply({
+      embeds: [buildEmbed({ kind: 'success', title: 'Ticket created', description: `Your ticket is ready: <#${channel.id}>`, moderator: interaction.user })],
+      flags: EPHEMERAL,
+    });
+  }
   if (interaction.isButton()) {
     const cfg = getConfig(interaction.guildId);
     try {

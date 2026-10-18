@@ -31,7 +31,12 @@ const SCHEMA = [
     lockdown_active INTEGER NOT NULL DEFAULT 0,
     lockdown_channels TEXT NOT NULL DEFAULT '[]',
     auto_role_user_id TEXT,
-    auto_role_bot_id TEXT
+    auto_role_bot_id TEXT,
+    ticket_panel_channel_id TEXT,
+    ticket_panel_message_id TEXT,
+    ticket_storage_channel_id TEXT,
+    ticket_category_id TEXT,
+    ticket_counter INTEGER NOT NULL DEFAULT 0
   )`,
   `CREATE TABLE IF NOT EXISTS events (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -44,6 +49,18 @@ const SCHEMA = [
     count INTEGER NOT NULL DEFAULT 0,
     last_used INTEGER NOT NULL DEFAULT 0
   )`,
+  `CREATE TABLE IF NOT EXISTS tickets (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    guild_id TEXT NOT NULL,
+    number INTEGER NOT NULL,
+    opener_id TEXT NOT NULL,
+    channel_id TEXT NOT NULL,
+    subject TEXT NOT NULL DEFAULT '',
+    status TEXT NOT NULL DEFAULT 'OPEN',
+    created_at INTEGER NOT NULL,
+    closed_at INTEGER
+  )`,
+  'CREATE INDEX IF NOT EXISTS idx_tickets_channel ON tickets(channel_id)',
 ];
 
 export function initDb(dbPath) {
@@ -51,6 +68,7 @@ export function initDb(dbPath) {
   db.prepare('PRAGMA journal_mode = WAL').get();
   for (const statement of SCHEMA) db.prepare(statement).run();
   migrate();
+  migrateTickets();
   return db;
 }
 
@@ -65,9 +83,33 @@ function migrate() {
     ['lockdown_channels', "TEXT NOT NULL DEFAULT '[]'"],
     ['auto_role_user_id', 'TEXT'],
     ['auto_role_bot_id', 'TEXT'],
+    ['ticket_panel_channel_id', 'TEXT'],
+    ['ticket_panel_message_id', 'TEXT'],
+    ['ticket_storage_channel_id', 'TEXT'],
+    ['ticket_category_id', 'TEXT'],
+    ['ticket_counter', 'INTEGER NOT NULL DEFAULT 0'],
   ];
   for (const [name, type] of ADDITIONS) {
     if (!cols.has(name)) db.prepare(`ALTER TABLE config ADD COLUMN ${name} ${type}`).run();
+  }
+}
+
+// The tickets table landed after deployments existed; create it for those.
+function migrateTickets() {
+  const has = db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='tickets'").get();
+  if (!has) {
+    db.prepare(`CREATE TABLE IF NOT EXISTS tickets (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      guild_id TEXT NOT NULL,
+      number INTEGER NOT NULL,
+      opener_id TEXT NOT NULL,
+      channel_id TEXT NOT NULL,
+      subject TEXT NOT NULL DEFAULT '',
+      status TEXT NOT NULL DEFAULT 'OPEN',
+      created_at INTEGER NOT NULL,
+      closed_at INTEGER
+    )`).run();
+    db.prepare('CREATE INDEX IF NOT EXISTS idx_tickets_channel ON tickets(channel_id)').run();
   }
 }
 
@@ -140,6 +182,11 @@ const DEFAULTS = {
   lockdownChannels: [],
   autoRoleUserId: null,
   autoRoleBotId: null,
+  ticketPanelChannelId: null,
+  ticketPanelMessageId: null,
+  ticketStorageChannelId: null,
+  ticketCategoryId: null,
+  ticketCounter: 0,
 };
 
 function parseJsonArray(text) {
@@ -166,6 +213,11 @@ export function getConfig(guildId) {
     lockdownChannels: parseJsonArray(row.lockdown_channels ?? '[]'),
     autoRoleUserId: row.auto_role_user_id ?? null,
     autoRoleBotId: row.auto_role_bot_id ?? null,
+    ticketPanelChannelId: row.ticket_panel_channel_id ?? null,
+    ticketPanelMessageId: row.ticket_panel_message_id ?? null,
+    ticketStorageChannelId: row.ticket_storage_channel_id ?? null,
+    ticketCategoryId: row.ticket_category_id ?? null,
+    ticketCounter: row.ticket_counter ?? 0,
   };
 }
 
@@ -174,8 +226,9 @@ export function setConfig(guildId, patch) {
   db.prepare(
     `INSERT OR REPLACE INTO config (guild_id, log_channel_id, mod_role_ids, owner_ids, raid_threshold, nuke_auto_action,
        control_panel_channel_id, control_panel_message_id, lockdown_active, lockdown_channels,
-       auto_role_user_id, auto_role_bot_id)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+       auto_role_user_id, auto_role_bot_id,
+       ticket_panel_channel_id, ticket_panel_message_id, ticket_storage_channel_id, ticket_category_id, ticket_counter)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
   ).run(
     guildId,
     merged.logChannelId,
@@ -188,9 +241,36 @@ export function setConfig(guildId, patch) {
     merged.lockdownActive,
     JSON.stringify(merged.lockdownChannels),
     merged.autoRoleUserId,
-    merged.autoRoleBotId
+    merged.autoRoleBotId,
+    merged.ticketPanelChannelId,
+    merged.ticketPanelMessageId,
+    merged.ticketStorageChannelId,
+    merged.ticketCategoryId,
+    merged.ticketCounter
   );
   return merged;
+}
+
+/* ---------- tickets ---------- */
+
+export function createTicketRow({ guildId, number, openerId, channelId, subject }) {
+  const { lastInsertRowid } = db
+    .prepare(`INSERT INTO tickets (guild_id, number, opener_id, channel_id, subject, status, created_at)
+       VALUES (?, ?, ?, ?, ?, 'OPEN', ?)`)
+    .run(guildId, number, openerId, channelId, subject, Date.now());
+  return getTicketRow(lastInsertRowid);
+}
+
+export function getTicketRow(id) {
+  return db.prepare('SELECT * FROM tickets WHERE id = ?').get(id) ?? null;
+}
+
+export function getTicketByChannel(channelId) {
+  return db.prepare("SELECT * FROM tickets WHERE channel_id = ? AND status = 'OPEN' ORDER BY id DESC LIMIT 1").get(channelId) ?? null;
+}
+
+export function closeTicketRow(id, closedAt = Date.now()) {
+  db.prepare("UPDATE tickets SET status = 'CLOSED', closed_at = ? WHERE id = ? AND status = 'OPEN'").run(closedAt, id);
 }
 
 /* ---------- security event log ---------- */

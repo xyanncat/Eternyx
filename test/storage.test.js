@@ -48,6 +48,11 @@ test('config merges patches over defaults', () => {
     lockdownChannels: [],
     autoRoleUserId: null,
     autoRoleBotId: null,
+    ticketPanelChannelId: null,
+    ticketPanelMessageId: null,
+    ticketStorageChannelId: null,
+    ticketCategoryId: null,
+    ticketCounter: 0,
   });
   setConfig('g', { logChannelId: 'c1' });
   setConfig('g', { modRoleIds: ['r1'] });

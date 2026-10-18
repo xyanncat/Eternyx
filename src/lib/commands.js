@@ -20,6 +20,7 @@ export const KNOWN_ACTIONS = [
   'lockdown-off',
   'test-alert',
   'set-auto-role',
+  'post-ticket-panel',
   'announce',
   'set-slowmode',
   'lock-channel',
@@ -48,6 +49,7 @@ export function validateCommand({ action, params = {} }) {
     case 'add-mod-role':
     case 'set-control-channel':
     case 'post-panel':
+    case 'post-ticket-panel':
       if (!isSnowflake(p.id ?? p.channelId ?? '')) return { ok: false, reason: 'missing/invalid id' };
       return { ok: true };
     case 'set-raid-threshold': {
@@ -211,6 +213,13 @@ export async function executeCommand(client, { action, params = {}, createdBy = 
         }
         setConfig(guild.id, { autoRoleBotId: role.id });
         return { ok: true, detail: `auto-role for bots → @${role.name}` };
+      }
+      case 'post-ticket-panel': {
+        const ch = channelOf(guild, params.channelId ?? params.id);
+        if (!ch?.isTextBased()) return { ok: false, detail: 'channel not found or not text-based' };
+        const { postTicketPanel } = await import('./tickets.js');
+        const message = await postTicketPanel(guild, ch);
+        return { ok: true, detail: `ticket panel posted in <#${ch.id}> (message ${message.id})` };
       }
       case 'announce': {
         const ch = channelOf(guild, params.channelId);
