@@ -210,6 +210,24 @@ Verified live 2026-10-03: #test announcement embed image = uploaded CDN
 - **Realtime:** instant dispatch (~3 s) via SIGUSR1 wake; otherwise 60 s poll.
   Web reports every 60 s (snapshot: bot stats, channels, roles, members,
   automodRules, config — all encrypted).
+- **Ticket system (2026-10-18, commit 2afb91b):** button-driven, fully on-phone.
+  Panel live in #📩┃den-den-mushi (`1472933470581031101`, message `1561402466879152200`)
+  with `ticket:open` button → subject modal → private channel `ticket-<n>` (created
+  under an auto-made TICKETS category; @everyone denied View, opener + mod roles
+  allowed) → close via `ticket:close` button or `/ticket close` → chat-by-chat
+  transcript posted as .txt to the auto-created **#ticket-storage** channel
+  (`1561402462013755413`, under BOT LOGS) AND saved to phone disk
+  `~/eternyx-bot/data/tickets/ticket-<n>.txt` (the "device storage" copy).
+  DB: `tickets` table + 5 config cols (panel/storage/category ids, counter).
+  Staff cmds: /ticket panel|storage|close (mod-gated); dashboard action
+  `post-ticket-panel` for remote setup. 40 tests pass. Panel + storage channel
+  verified live via REST.
+- **Quick-tunnel rot (2026-10-18):** dashboard "down" = Cloudflare revoked the
+  12-day-old quick tunnel (`Unauthorized: Tunnel not found` in tunnel.log while
+  web stayed healthy locally). Fix: `sv restart tunnel` + hand out the NEW URL.
+  Current URL: `https://prepare-bargains-too-trinity.trycloudflare.com`.
+  Quick tunnels die eventually — if the dashboard 404s/000s again, first check
+  tunnel.log for that error and restart the tunnel; URL rotates every restart.
 - **UI refresh (2026-10-07, commit 1cb6305):** Ribbon 3D-tilt hero art
   (`public/images/eternyx-ribbon.png`) + new Overview section, restyled login/
   board/globals. `ship-web.sh` now ships `public/` (standalone server does NOT
