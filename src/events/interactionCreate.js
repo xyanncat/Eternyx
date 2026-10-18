@@ -45,9 +45,10 @@ async function handleButton(interaction, cfg) {
     if (!isMod(interaction.member, cfg)) {
       return interaction.reply({ embeds: [errorEmbed('Moderators only.', interaction.user)], flags: EPHEMERAL });
     }
+    await interaction.deferReply({ flags: EPHEMERAL });
     const { panelState, panelEmbed } = await import('../lib/panel.js');
     const state = await panelState(guild);
-    return interaction.reply({ embeds: [panelEmbed(guild, state)], flags: EPHEMERAL });
+    return interaction.editReply({ embeds: [panelEmbed(guild, state).embed] });
   }
 
   if (action === 'lockdown') {
@@ -57,7 +58,7 @@ async function handleButton(interaction, cfg) {
     await interaction.deferUpdate();
     const { activateLockdown, deactivateLockdown } = await import('../lib/lockdown.js');
     const { sendAuditLog } = await import('../lib/audit.js');
-    const reason = `control panel by ${interaction.user.username}`;
+    const reason = `control deck by ${interaction.user.username}`;
     const result = arg === 'on'
       ? await activateLockdown(guild, interaction.user.username, reason)
       : await deactivateLockdown(guild, interaction.user.username, reason);
@@ -75,7 +76,42 @@ async function handleButton(interaction, cfg) {
     // Refresh the panel message with the new state.
     const { panelState, panelEmbed, panelButtons } = await import('../lib/panel.js');
     const state = await panelState(guild);
-    await interaction.editReply({ embeds: [panelEmbed(guild, state)], components: [panelButtons()] }).catch(() => {});
+    await interaction.editReply({ embeds: [panelEmbed(guild, state).embed], components: panelButtons() }).catch(() => {});
+    return;
+  }
+
+  // Control-deck command buttons: defer first (10062 lesson), then run the
+  // same validated dispatcher the dashboard uses — one code path.
+  const DECK_ACTIONS = { alert: 'test-alert', shield: 'automod-invite', presets: 'automod-preset', guard: null };
+  if (action === 'alert' || action === 'shield' || action === 'presets' || action === 'guard' || action === 'refresh') {
+    if (!isMod(interaction.member, cfg)) {
+      return interaction.reply({ embeds: [errorEmbed('Moderators only.', interaction.user)], flags: EPHEMERAL });
+    }
+    await interaction.deferUpdate();
+    try {
+      if (action === 'refresh') {
+        const { postPanel } = await import('../lib/panel.js');
+        await postPanel(guild, interaction.channel);
+        return; // postPanel deletes this very message — nothing to edit
+      }
+      const { executeCommand } = await import('../lib/commands.js');
+      const params = action === 'guard' ? { limit: 10 } : {};
+      const result = await executeCommand(interaction.client, {
+        action: DECK_ACTIONS[action] ?? (action === 'guard' ? 'automod-mention-spam' : null),
+        params,
+        createdBy: `control deck by ${interaction.user.username}`,
+      });
+      const embed = buildEmbed({
+        kind: result.ok ? 'success' : 'error',
+        title: result.ok ? '✅ Done' : '❌ Failed',
+        description: result.detail,
+        moderator: interaction.user,
+      });
+      await interaction.followUp({ embeds: [embed], flags: EPHEMERAL }).catch(() => {});
+    } catch (err) {
+      logger.error(`deck button ${action} failed: ${err?.stack ?? err}`);
+      await interaction.followUp({ embeds: [errorEmbed('That action failed. The incident has been logged.', interaction.user)], flags: EPHEMERAL }).catch(() => {});
+    }
     return;
   }
 }

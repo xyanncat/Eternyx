@@ -10,7 +10,6 @@ import { existsSync } from 'node:fs';
 import path from 'node:path';
 import { AttachmentBuilder, EmbedBuilder } from 'discord.js';
 import { ROOT } from '../config.js';
-
 export const BRAND_FILE = path.join(ROOT, 'assets', 'kafka.png');
 export const BRAND_NAME = 'kafka.png';
 

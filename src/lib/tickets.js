@@ -18,6 +18,7 @@ import {
   ModalBuilder,
 } from 'discord.js';
 import { writeFile, mkdir } from 'node:fs/promises';
+import { existsSync } from 'node:fs';
 import path from 'node:path';
 import { ROOT } from '../config.js';
 import { getConfig, setConfig, createTicketRow, getTicketByChannel, closeTicketRow, recordEvent } from '../storage/db.js';
@@ -36,10 +37,10 @@ const STAFF_PERMS = [
 
 // Ticket categories — each becomes a panel button + modal + channel prefix.
 export const TICKET_CATEGORIES = {
-  support: { label: 'Support', emoji: '🛠', style: ButtonStyle.Primary, color: 0x5865f2, blurb: 'General help, questions, or something broken.' },
-  report: { label: 'Report', emoji: '🚩', style: ButtonStyle.Danger, color: 0xe74c3c, blurb: 'Report a member breaking the pirate code.' },
-  appeal: { label: 'Appeal', emoji: '⚖️', style: ButtonStyle.Success, color: 0x2ecc71, blurb: 'Appeal a punishment you received.' },
-  other: { label: 'Other', emoji: '💬', style: ButtonStyle.Secondary, color: 0x95a5a6, blurb: 'Anything else — staff will route it.' },
+  support: { label: 'Support', emoji: '🕸', style: ButtonStyle.Primary, color: 0x6b21a8, blurb: 'General help, questions, or something broken.' },
+  report: { label: 'Report', emoji: '⚔️', style: ButtonStyle.Danger, color: 0xe74c3c, blurb: 'Report a member breaking the pirate code.' },
+  appeal: { label: 'Appeal', emoji: '🍇', style: ButtonStyle.Success, color: 0x2ecc71, blurb: 'Appeal a punishment you received.' },
+  other: { label: 'Other', emoji: '💜', style: ButtonStyle.Secondary, color: 0x95a5a6, blurb: 'Anything else — staff will route it.' },
 };
 
 export function ticketPanelButtons() {
@@ -52,9 +53,9 @@ export function ticketPanelButtons() {
 }
 
 export function ticketPanelEmbed() {
-  return buildEmbed({
+  const embed = buildEmbed({
     kind: 'info',
-    title: '🎫 Support Tickets',
+    title: '🕸 Eternyx tickets',
     description: '**Need the staff? Pick a category and a private ticket opens for you.**',
     fields: Object.entries(TICKET_CATEGORIES).map(([key, c]) => ({
       name: `${c.emoji} ${c.label}`,
@@ -62,6 +63,14 @@ export function ticketPanelEmbed() {
       inline: true,
     })),
   });
+  embed.setColor(0x6b21a8);
+  return embed;
+}
+
+export function ticketPanelArt() {
+  const full = path.join(ROOT, 'assets', 'kafka-panel-tickets.png');
+  if (!existsSync(full)) return null;
+  return new AttachmentBuilder(full, { name: 'kafka-panel-tickets.png' });
 }
 
 export function ticketSubjectModal(categoryKey) {
@@ -125,7 +134,12 @@ export async function postTicketPanel(guild, channel) {
     await old?.delete().catch(() => {});
   }
   await ensureStorageChannel(guild); // bootstraps the archive target on first setup
-  const message = await channel.send(applyBrand({ embeds: [ticketPanelEmbed()], components: [ticketPanelButtons()] }));
+  const embed = ticketPanelEmbed();
+  const art = ticketPanelArt();
+  if (art) embed.setImage('attachment://kafka-panel-tickets.png');
+  const payload = { embeds: [embed], components: [ticketPanelButtons()] };
+  if (art) payload.files = [art];
+  const message = await channel.send(payload);
   setConfig(guild.id, { ticketPanelChannelId: channel.id, ticketPanelMessageId: message.id });
   logger.info(`ticket panel posted in ${channel.id} (${message.id})`);
   return message;
